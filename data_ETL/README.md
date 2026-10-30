@@ -43,10 +43,14 @@ picked up and shown in `msg.md` as "values the parser could not resolve".
 |---|---|
 | `SOURCE_ID` | Short unique name used for run folders and in `msg.md`, e.g. `PHAC-NWMP` |
 | `ORGANIZATION` | Portal organization to submit as. It is the account's Ego scope `WW-<ORG>.WRITE` minus `WW-`, and case-sensitive. |
-| `CATEGORY` | Portal category, normally `imicroseq_wastewater` |
+| `CATEGORY` | Portal category. The portals name it differently, so set `CATEGORY_DEV="imicroseq_wastewater"` and `CATEGORY_PROD="imicroseq_environmental"`. |
 | `UPLOAD_CSV` | Path of the CSV `etl.sh` writes, relative to the source folder |
 | `MAX_NEW` | Size guard: a run finding more new records than this stops without uploading (unless `--force`) |
 | `ENABLED` | `1` = `run_weekly.sh` runs it, `0` = skipped |
+
+Any of `ORGANIZATION`, `CATEGORY`, `MAX_NEW` and `ENABLED` can be set per portal with a `_DEV` or
+`_PROD` suffix. The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a source on dev
+only.
 
 ## Adding a new source, step by step
 
@@ -75,7 +79,8 @@ picked up and shown in `msg.md` as "values the parser could not resolve".
    ```
    Read `msg.md` and `runs/<stamp>/<SOURCE_ID>/delta.csv`.
 7. **First load:** agree it with the data owner, then run `./run_source.sh <NAME> --force`. A
-   person reviews and **commits it on the website**.
+   person reviews and **commits it on the website**. Do dev first. For prod, repeat with
+   `--env prod`; prod has no date window, so its first load is the full history.
 8. **Enable it:** set `ENABLED=1` so `run_weekly.sh` includes it, and add it to the table at the
-   top of this file.
+   top of this file. `ENABLED_PROD=0` keeps it out of prod runs until it's ready there.
 9. **Document it** in `data_ETL/<NAME>/README.md`, using `PHAC/README.md` as the model.

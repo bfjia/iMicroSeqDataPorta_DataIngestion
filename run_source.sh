@@ -4,7 +4,7 @@
 #
 #   1 pending check   stop if a submission for the org is still open (before any work)
 #   2 ETL             data_ETL/<SOURCE>/etl.sh -> upload-ready CSV
-#   3 date window     keep only weeks from DEV_MIN_START_DATE (pipeline.conf)
+#   3 date window     keep only weeks from <ENV>_MIN_START_DATE (pipeline.conf)
 #   4 portal snapshot what the org already has published
 #   5 diff            new / changed / unchanged
 #   6 guard           stop if "new" is suspiciously large (MAX_NEW)
@@ -14,7 +14,10 @@
 # commit on the portal website. Every run writes a status for msg.md.
 # README.md explains each step in detail; SOP.md is the plain-language guide.
 #
+# The portal is dev or prod: --env, else PORTAL_ENV in pipeline.conf.
+#
 #   ./run_source.sh PHAC
+#   ./run_source.sh PHAC --env prod --dry-run
 #   ./run_source.sh PHAC --holdout-weeks 1 --keep-work
 
 set -euo pipefail
@@ -30,6 +33,7 @@ Usage: ./run_source.sh <SOURCE> [options]
   <SOURCE>              folder name under data_ETL/, e.g. PHAC
 
 Options:
+  --env dev|prod        which portal (default: PORTAL_ENV in pipeline.conf)
   --dry-run             do every step except the upload: shows what WOULD be uploaded
   --force               upload even if there are more new records than MAX_NEW
   --holdout-weeks N     TEST ONLY: hold back the newest N weeks of new records
@@ -44,6 +48,7 @@ EOF
 
 # --- Arguments -----------------------------------------------------------
 SOURCE_NAME=""
+ENV_ARG=""
 DRY_RUN=0
 FORCE=0
 HOLDOUT_WEEKS=0
@@ -51,10 +56,11 @@ HOLDOUT_RANDOM=0
 KEEP_WORK=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --env)            [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; ENV_ARG="$2"; shift ;;
         --dry-run)        DRY_RUN=1 ;;
         --force)          FORCE=1 ;;
-        --holdout-weeks)  HOLDOUT_WEEKS="${2:-}"; shift ;;
-        --holdout-random) HOLDOUT_RANDOM="${2:-}"; shift ;;
+        --holdout-weeks)  [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; HOLDOUT_WEEKS="$2"; shift ;;
+        --holdout-random) [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; HOLDOUT_RANDOM="$2"; shift ;;
         --keep-work)      KEEP_WORK=1 ;;
         -h|--help)        usage; exit 0 ;;
         -*)               echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -78,20 +84,37 @@ if [[ ! -f "${SOURCE_DIR}/source.conf" || ! -f "${SOURCE_DIR}/etl.sh" ]]; then
 fi
 
 # --- Configuration -------------------------------------------------------
+PORTAL_ENV="dev"
 DEV_MIN_START_DATE=""
+PROD_MIN_START_DATE=""
 DEFAULT_MAX_NEW=2000
 SLACK_CHANNEL=""
 # shellcheck source=pipeline.conf
 source "${REPO_DIR}/pipeline.conf"
 
-SOURCE_ID=""; ORGANIZATION=""; CATEGORY="imicroseq_wastewater"; UPLOAD_CSV=""; MAX_NEW=""; ENABLED=1
+# Which portal: --env wins over pipeline.conf. Python reads $PORTAL_ENV.
+PORTAL_ENV="${ENV_ARG:-${PORTAL_ENV}}"
+case "${PORTAL_ENV}" in
+    dev|prod) ;;
+    *) echo "ERROR: the portal must be dev or prod (got '${PORTAL_ENV}')" >&2; exit 2 ;;
+esac
+export PORTAL_ENV
+ENV_UPPER="${PORTAL_ENV^^}"
+
+SOURCE_ID=""; ORGANIZATION=""; CATEGORY=""; UPLOAD_CSV=""; MAX_NEW=""; ENABLED=1
 # shellcheck disable=SC1091
 source "${SOURCE_DIR}/source.conf"
+# Per-portal settings: e.g. CATEGORY_PROD overrides CATEGORY on prod.
+for key in ORGANIZATION CATEGORY MAX_NEW; do
+    override="${key}_${ENV_UPPER}"
+    if [[ -n "${!override:-}" ]]; then printf -v "${key}" '%s' "${!override}"; fi
+done
 for var in SOURCE_ID ORGANIZATION CATEGORY UPLOAD_CSV; do
-    [[ -n "${!var}" ]] || { echo "ERROR: ${SOURCE_DIR}/source.conf must set ${var}" >&2; exit 2; }
+    [[ -n "${!var}" ]] || { echo "ERROR: ${SOURCE_DIR}/source.conf must set ${var} (or ${var}_${ENV_UPPER})" >&2; exit 2; }
 done
 MAX_NEW="${MAX_NEW:-${DEFAULT_MAX_NEW}}"
-CUTOFF="${DEV_MIN_START_DATE}"
+cutoffVar="${ENV_UPPER}_MIN_START_DATE"
+CUTOFF="${!cutoffVar:-}"
 
 # --- Conda environment ---------------------------------------------------
 activateEnv() {
@@ -178,22 +201,23 @@ trap onExit EXIT
 
 setStatus SOURCE_ID "${SOURCE_ID}"
 setStatus SOURCE_NAME "${SOURCE_NAME}"
+setStatus PORTAL_ENV "${PORTAL_ENV}"
 setStatus ORGANIZATION "${ORGANIZATION}"
 setStatus LOG "${LOG}"
 setStatus CUTOFF "${CUTOFF}"
 setStatus MAX_NEW "${MAX_NEW}"
 
-echo "== ${SOURCE_ID}: run started $(date '+%Y-%m-%d %H:%M:%S')"
-echo "   organization ${ORGANIZATION}, category ${CATEGORY}, date window from ${CUTOFF:-the beginning}"
+echo "== ${SOURCE_ID}: run started $(date '+%Y-%m-%d %H:%M:%S') on ${ENV_UPPER}"
+echo "   portal ${PORTAL_ENV}, organization ${ORGANIZATION}, category ${CATEGORY}, date window from ${CUTOFF:-the beginning}"
 (( HOLDOUT_WEEKS + HOLDOUT_RANDOM > 0 )) && echo "   TEST MODE: holding back records (--holdout-*)"
 (( DRY_RUN )) && echo "   DRY RUN: every step except the upload"
 
 # --- 1. Pending check, before any actual work ---------------------------
 STEP="login"
 echo "[1/7] Pending check"
-echo "      Logging in to the portal"
+echo "      Logging in to the ${PORTAL_ENV} portal"
 PORTAL_TOKEN="$(python "${UPLOAD_DIR}/step1_token.py")" \
-    || fail "Could not log in to the portal. Check the username and password in upload_workflow/.env."
+    || fail "Could not log in to the ${PORTAL_ENV} portal. Check ${PORTAL_ENV}PortalUser and ${PORTAL_ENV}PortalPass in upload_workflow/.env."
 export PORTAL_TOKEN
 
 STEP="pending check"
@@ -226,7 +250,14 @@ echo "      No open submission for ${ORGANIZATION}."
 
 STEP="permission check"
 if [[ "${WRITE_SCOPE}" != 1 ]]; then
-    fail "The portal account has no write permission for ${ORGANIZATION} (it needs the scope WW-${ORGANIZATION}.WRITE). Ask the portal administrators to grant it."
+    NO_SCOPE="The ${PORTAL_ENV} portal account has no write permission for ${ORGANIZATION} (it needs the scope WW-${ORGANIZATION}.WRITE). Ask the portal administrators to grant it."
+    if [[ "${DRY_RUN}" -eq 1 ]]; then
+        # A dry run uploads nothing, so carry on and show what would be uploaded.
+        echo "      WARNING: ${NO_SCOPE} A real run would stop here."
+        setStatus NO_WRITE_SCOPE 1
+    else
+        fail "${NO_SCOPE}"
+    fi
 fi
 
 # --- 2. ETL ---------------------------------------------------------------

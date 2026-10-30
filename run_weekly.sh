@@ -4,11 +4,13 @@
 # at this script. It runs run_source.sh for every enabled source under
 # data_ETL/ and then writes ONE notification digest, msg.md.
 #
-#   ./run_weekly.sh             normal run (what the scheduler calls)
-#   ./run_weekly.sh --dry-run   every step except the upload, for checking
+#   ./run_weekly.sh                    normal run (what the scheduler calls)
+#   ./run_weekly.sh --dry-run          every step except the upload, for checking
+#   ./run_weekly.sh --env prod [...]   use the prod portal (default: PORTAL_ENV
+#                                      in pipeline.conf)
 #
 # * Folders under data_ETL/ starting with "_" (the template) are skipped, as
-#   are sources whose source.conf says ENABLED=0.
+#   are sources whose source.conf says ENABLED=0 (or ENABLED_DEV / _PROD=0).
 # * One source failing does not stop the others.
 # * Only one pipeline run at a time (lock file runs/.lock).
 # * Nothing is ever published: submissions wait for a person to commit them
@@ -24,16 +26,30 @@ ENV_NAME="ProjectIngestion"
 
 SOURCE_ARGS=()
 DRY_RUN=0
-case "${1:-}" in
-    "")        ;;
-    --dry-run) SOURCE_ARGS=(--dry-run); DRY_RUN=1 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
-    *)         echo "Unknown option: $1 (only --dry-run is accepted)" >&2; exit 2 ;;
-esac
+ENV_ARG=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --dry-run) SOURCE_ARGS+=(--dry-run); DRY_RUN=1 ;;
+        --env)     [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; ENV_ARG="$2"; shift ;;
+        -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+        *)         echo "Unknown option: $1 (accepted: --dry-run, --env dev|prod)" >&2; exit 2 ;;
+    esac
+    shift
+done
 
+PORTAL_ENV="dev"
 SLACK_CHANNEL=""
 # shellcheck source=pipeline.conf
 source "${REPO_DIR}/pipeline.conf"
+
+# Which portal: --env wins over pipeline.conf. Every source in this run uses it.
+PORTAL_ENV="${ENV_ARG:-${PORTAL_ENV}}"
+case "${PORTAL_ENV}" in
+    dev|prod) ;;
+    *) echo "ERROR: the portal must be dev or prod (got '${PORTAL_ENV}')" >&2; exit 2 ;;
+esac
+export PORTAL_ENV
+SOURCE_ARGS+=(--env "${PORTAL_ENV}")
 
 # --- Conda environment (a scheduler starts with a bare shell) -------------
 activateEnv() {
@@ -65,7 +81,7 @@ export INGEST_RUN_DIR="${REPO_DIR}/runs/$(date +%Y%m%d-%H%M%S)"
 mkdir -p "${INGEST_RUN_DIR}"
 exec > >(tee -a "${INGEST_RUN_DIR}/weekly.log") 2>&1
 
-echo "== Weekly run started $(date '+%Y-%m-%d %H:%M:%S') -> ${INGEST_RUN_DIR#"${REPO_DIR}"/}"
+echo "== Weekly run started $(date '+%Y-%m-%d %H:%M:%S') on ${PORTAL_ENV^^} -> ${INGEST_RUN_DIR#"${REPO_DIR}"/}"
 
 # --- Every enabled source -------------------------------------------------
 ANY_PROBLEM=0
@@ -75,9 +91,10 @@ for dir in "${REPO_DIR}"/data_ETL/*/; do
     [[ "${name}" == _* ]] && continue
     [[ -f "${dir}/source.conf" ]] || continue
 
-    enabled="$(ENABLED=1; source "${dir}/source.conf"; echo "${ENABLED}")"
+    # ENABLED_DEV / ENABLED_PROD win over ENABLED on that portal.
+    enabled="$(ENABLED=1; source "${dir}/source.conf"; override="ENABLED_${PORTAL_ENV^^}"; echo "${!override:-${ENABLED}}")"
     if [[ "${enabled}" != 1 ]]; then
-        echo "== Skipping ${name} (ENABLED=${enabled} in its source.conf)"
+        echo "== Skipping ${name} (not enabled for ${PORTAL_ENV} in its source.conf)"
         continue
     fi
 

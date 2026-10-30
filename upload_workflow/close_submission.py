@@ -17,18 +17,19 @@ Normally run through ../close_submission.sh, which takes the source name.
 
     python close_submission.py --organization PHAC-AUTOINGEST
     python close_submission.py --organization PHAC-AUTOINGEST --yes
+    PORTAL_ENV=prod python close_submission.py --organization PHAC-AUTOINGEST
 """
 
 import sys
 
-from common import DefaultPortalURL, buildParser, resolveToken
+from common import DefaultCategory, DefaultPortalURL, PortalEnv, buildParser, resolveToken
 from step2_category import resolveCategory
 from step5_upload import closeSubmission, findActiveSubmission
 
 
 def main():
     parser = buildParser("Close (discard) the open submission for an organization.")
-    parser.add_argument("--category", default="imicroseq_wastewater", help="Category name or id")
+    parser.add_argument("--category", default=DefaultCategory, help="Category name or id")
     parser.add_argument("--organization", required=True, help="Organization, e.g. PHAC-AUTOINGEST")
     parser.add_argument("--yes", action="store_true", help="Close it without asking")
     args = parser.parse_args()
@@ -41,7 +42,7 @@ def main():
         return 0
 
     sid = active.get("id")
-    print(f"Open submission for {args.organization}:")
+    print(f"Open submission for {args.organization} on {PortalEnv}:")
     print(f"  number:  {sid}")
     print(f"  status:  {active.get('status')}")
     print(f"  created: {active.get('createdAt') or '?'}")

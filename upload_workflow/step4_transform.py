@@ -13,7 +13,7 @@ import csv
 import json
 import os
 
-from common import buildParser, resolveToken
+from common import DefaultCategory, buildParser, resolveToken
 
 
 def transformCsv(inputPath, headerMap, entityName, outputDir):
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     parser = buildParser("Rename a portal-schema CSV's headers to dictionary field names.")
     parser.add_argument("--input", required=True, help="Portal-schema CSV to transform")
     parser.add_argument("--output-dir", default=".", help="Where to write {entity}.csv")
-    parser.add_argument("--category", default="imicroseq_wastewater", help="Category name or id")
+    parser.add_argument("--category", default=DefaultCategory, help="Category name or id")
     parser.add_argument("--entity", default=None, help="Entity name. Defaults to the only schema.")
     parser.add_argument(
         "--header-map",

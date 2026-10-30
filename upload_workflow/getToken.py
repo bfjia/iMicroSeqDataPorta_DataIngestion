@@ -3,10 +3,12 @@ import re
 from urllib.parse import unquote
 import requests
 from dotenv import load_dotenv
+from portal_env import settings
 
-#endpoints
-BaseURL = "dev.virusseq-dataportal.ca"
-EgoURL = f"https://ego.{BaseURL}"
+#endpoints: dev or prod, picked by $PORTAL_ENV (see portal_env.py)
+Env = settings()
+BaseURL = Env["site"]
+EgoURL = Env["ego"]
 EgoLoginURL = EgoURL + "/api/oauth/login/keycloak"
 EgoAfterLogInGetTokenURL = EgoURL + "/api/oauth/ego-token"
 EgoClientID = "portal-ui" #after login, need to manually set the client ID.
@@ -16,10 +18,11 @@ KeyCloakURLRegex = r'action="([^"]+login-actions/authenticate[^"]+)"'
 
 #get the user/pass from .env
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
-egoUsername = os.environ.get("portalUser", "")
-egoPassword = os.environ.get("portalPass", "")
+egoUsername = os.environ.get(Env["userKey"], "")
+egoPassword = os.environ.get(Env["passKey"], "")
 if not egoUsername or not egoPassword:
-    raise SystemExit("Missing login information. Set portalUser and portalPass in .env first.")
+    raise SystemExit(f"Missing login information for {Env['name']}. "
+                     f"Set {Env['userKey']} and {Env['passKey']} in .env first.")
 
 
 def getEgoToken(username, password):

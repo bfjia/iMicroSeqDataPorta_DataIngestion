@@ -4,24 +4,28 @@
 # upload a new one. Use it when the open submission should not be committed:
 # it failed validation, or the data has to be redone.
 #
-#   ./close_submission.sh PHAC          shows the submission, asks you to confirm
-#   ./close_submission.sh PHAC --yes    closes it without asking
+#   ./close_submission.sh PHAC               shows the submission, asks you to confirm
+#   ./close_submission.sh PHAC --env prod    the same on the prod portal
+#   ./close_submission.sh PHAC --yes         closes it without asking
 #
-# Only an open (uncommitted) submission can be closed. Published records are
-# never touched, and nothing is ever committed. SOP.md, Procedure L.
+# The portal is --env, else PORTAL_ENV in pipeline.conf. Only an open
+# (uncommitted) submission can be closed. Published records are never touched,
+# and nothing is ever committed. SOP.md, Procedure L.
 
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_NAME="ProjectIngestion"
 
-usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; }
 
 SOURCE_NAME=""
+ENV_ARG=""
 YES=()
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --yes)     YES=(--yes) ;;
+        --env)     [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; ENV_ARG="$2"; shift ;;
         -h|--help) usage; exit 0 ;;
         -*)        echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
         *)
@@ -39,10 +43,29 @@ if [[ ! -f "${SOURCE_DIR}/source.conf" ]]; then
     echo "ERROR: no data_ETL/${SOURCE_NAME}/source.conf (the source is the folder name, e.g. PHAC)" >&2
     exit 2
 fi
-ORGANIZATION=""; CATEGORY="imicroseq_wastewater"
+PORTAL_ENV="dev"
+# shellcheck source=pipeline.conf
+source "${REPO_DIR}/pipeline.conf"
+PORTAL_ENV="${ENV_ARG:-${PORTAL_ENV}}"
+case "${PORTAL_ENV}" in
+    dev|prod) ;;
+    *) echo "ERROR: the portal must be dev or prod (got '${PORTAL_ENV}')" >&2; exit 2 ;;
+esac
+export PORTAL_ENV
+ENV_UPPER="${PORTAL_ENV^^}"
+
+ORGANIZATION=""; CATEGORY=""
 # shellcheck disable=SC1091
 source "${SOURCE_DIR}/source.conf"
-[[ -n "${ORGANIZATION}" ]] || { echo "ERROR: ${SOURCE_DIR}/source.conf must set ORGANIZATION" >&2; exit 2; }
+# Per-portal settings: e.g. CATEGORY_PROD overrides CATEGORY on prod.
+for key in ORGANIZATION CATEGORY; do
+    override="${key}_${ENV_UPPER}"
+    if [[ -n "${!override:-}" ]]; then printf -v "${key}" '%s' "${!override}"; fi
+done
+for var in ORGANIZATION CATEGORY; do
+    [[ -n "${!var}" ]] || { echo "ERROR: ${SOURCE_DIR}/source.conf must set ${var} (or ${var}_${ENV_UPPER})" >&2; exit 2; }
+done
+echo "Portal: ${PORTAL_ENV} · organization ${ORGANIZATION} · category ${CATEGORY}"
 
 # --- Conda environment ---------------------------------------------------
 activateEnv() {

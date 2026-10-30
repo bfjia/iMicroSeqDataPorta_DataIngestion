@@ -18,6 +18,7 @@ import sys
 
 from common import (
     DefaultBaseURL,
+    DefaultCategory,
     DefaultPollInterval,
     DefaultPortalURL,
     DefaultTimeout,
@@ -61,7 +62,7 @@ def parseArgs(argv=None):
         "--organization", required=True, help="Submitting organization, e.g. PHAC-AUTOINGEST"
     )
     parser.add_argument(
-        "--category", default="imicroseq_wastewater", help="Category name or numeric id"
+        "--category", default=DefaultCategory, help="Category name or numeric id"
     )
     parser.add_argument("--entity", default=None, help="Entity name. Defaults to the only schema.")
     parser.add_argument("--base-url", default=DefaultBaseURL, help="Submission service base URL")

@@ -13,9 +13,18 @@ its own. `main.py` chains the upload stages together.
 
 ## How the portal works
 
-The submission service is [Overture Lyric](https://github.com/overture-stack/lyric) 0.3.0, at
-`https://submission-service.dev.virusseq-dataportal.ca`. Its API docs are only readable at
-`/api-docs/swagger-ui-init.js`. A submission goes through three phases:
+The submission service is [Overture Lyric](https://github.com/overture-stack/lyric) 0.3.0. There
+are two portals, and `$PORTAL_ENV` picks one (`dev` when unset; see `portal_env.py`):
+
+| | dev | prod |
+|---|---|---|
+| Submission service | `https://submission-service.dev.virusseq-dataportal.ca` | `https://submissions.imicroseq-dataportal.ca` |
+| Login | `ego.dev.virusseq-dataportal.ca` | `ego.imicroseq-dataportal.ca` |
+| Wastewater category | `imicroseq_wastewater` (id 3) | `imicroseq_environmental` (id 1) |
+| `.env` login | `devPortalUser` / `devPortalPass` | `prodPortalUser` / `prodPortalPass` |
+
+Both use the same dictionary (`imicroseq_wastewater` v1.17). Lyric's API docs are only readable
+at `/api-docs/swagger-ui-init.js`. A submission goes through three phases:
 
 1. **Upload:** the file is staged into a *submission* and validated in the background.
 2. **Validate:** the submission settles on `VALID` or `INVALID`. Nothing is public yet.
@@ -27,15 +36,19 @@ way to close one yet.
 
 ## The scripts
 
-All of them take `--base-url` (default: dev) and `--token`. Without a token, they read
+All of them follow `$PORTAL_ENV` (dev unless set) for the portal, its login and the default
+`--category`. They also take `--base-url` and `--token`. Without a token, they read
 `$PORTAL_TOKEN`, and failing that they log in fresh using `.env`. Each one runs standalone. Run
-them from anywhere with the `ProjectIngestion` env active.
+them from anywhere with the `ProjectIngestion` env active, e.g.
+`PORTAL_ENV=prod python check_pending.py --organization PHAC-AUTOINGEST`. Don't reuse a
+`$PORTAL_TOKEN` from one portal on the other.
 
 ### Portal stages (used by `main.py`)
 
 | Script | What it does | Portal calls | Standalone example |
 |---|---|---|---|
-| `getToken.py` | Logs in through Keycloak like a browser and prints an Ego JWT. Credentials come from `.env`. It is the original script, unchanged. | `ego.dev…/api/oauth/login/keycloak`, `…/ego-token` | `python getToken.py` |
+| `portal_env.py` | The dev and prod hosts, categories and `.env` key names, picked by `$PORTAL_ENV`. The only place portal hosts are written down. | | |
+| `getToken.py` | Logs in through Keycloak like a browser and prints an Ego JWT. The original script, changed only to take the portal and its `.env` login (`<env>PortalUser` / `<env>PortalPass`) from `portal_env.py`. | `ego.<portal>/api/oauth/login/keycloak`, `…/ego-token` | `python getToken.py` |
 | `step1_token.py` | Wraps `getToken.py`. `--scopes` prints the token's permissions. | (as above) | `python step1_token.py --scopes` |
 | `step2_category.py` | Turns a category name into its numeric id | `GET /category`, `GET /category/{id}` | `python step2_category.py --category imicroseq_wastewater` |
 | `step3_dictionary.py` | Fetches the dictionary and builds the map from CSV title to field name | `GET /dictionary/category/{id}` | `python step3_dictionary.py --category-id 3` |
@@ -43,7 +56,7 @@ them from anywhere with the `ProjectIngestion` env active.
 | `step5_upload.py` | Uploads a file, opening a submission. `--replace` discards an open one first. | `GET /submission/category/{id}?onlyActive=true`, `DELETE /submission/{id}`, `POST /submission/category/{id}/data` | (normally via `main.py`) |
 | `step6_validate.py` | Polls until validation settles. `--details` prints per-record errors. | `GET /submission/{id}` (event stream), `GET /submission/{id}/details` | `python step6_validate.py --submission-id <number> --details` |
 | `main.py` | Runs steps 1–6 and stops. On VALID it prints the website link to commit. On INVALID it prints the link to the errors. `--result-json` writes the outcome for scripts. | all of the above | `python main.py --input delta.csv --organization PHAC-AUTOINGEST` |
-| `common.py` | Shared HTTP, polling and token helpers, and the **dev URLs** (`DefaultBaseURL`, `DefaultPortalURL`) | | |
+| `common.py` | Shared HTTP, polling and token helpers. `PortalEnv`, `DefaultBaseURL`, `DefaultPortalURL` and `DefaultCategory` come from `portal_env.py`. | | |
 
 `main.py` refuses to upload if a submission is already open for the organization. Passing
 `--replace` discards that submission first; use it only when re-uploading after fixing an INVALID
@@ -96,5 +109,6 @@ token. Uploads (and the per-user listing) need one.
 ## Requirements
 
 - The `ProjectIngestion` conda env (`../environment.yaml`).
-- `upload_workflow/.env` with `portalUser` and `portalPass`, plus `duoliauthtoken` (the Slack
-  bot token) if Slack is on. Copy `.env.example`. It is never committed.
+- `upload_workflow/.env` with `devPortalUser` / `devPortalPass` and `prodPortalUser` /
+  `prodPortalPass`, plus `duoliauthtoken` (the Slack bot token) if Slack is on. Copy
+  `.env.example`. It is never committed.

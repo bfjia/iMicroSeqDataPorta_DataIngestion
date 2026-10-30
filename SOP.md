@@ -7,8 +7,10 @@ the portal website.
 You don't need to understand the code. Follow the steps in order, and copy the commands exactly as
 written. If something goes wrong, the tool says so in plain words in a file called `msg.md`.
 
-> Right now everything goes to the **test (dev) portal**, `dev.virusseq-dataportal.ca`. Nothing
-> reaches the public (prod) site.
+> **There are two portals.** The **test (dev) portal** is `dev.virusseq-dataportal.ca`. The
+> **real (prod) portal** is `imicroseq-dataportal.ca`. Every command uses **dev** unless you add
+> `--env prod` to it. The first line of every message says which portal, `(dev)` or `(prod)`.
+> Committing on the prod website publishes the records for real.
 
 ---
 
@@ -22,6 +24,7 @@ written. If something goes wrong, the tool says so in plain words in a file call
 | **Close** | Throwing away a submission that hasn't been committed, so a new one can be uploaded. **The website can't do this yet:** use the `close_submission.sh` script (Procedure L). |
 | **msg.md** | The tool's message to you after every run: what happened and what to do next |
 | **Terminal** | The black window where you type commands (Ubuntu / WSL) |
+| **dev / prod** | The test portal and the real one. Commands use dev unless you add `--env prod`. |
 
 ---
 
@@ -47,8 +50,8 @@ written. If something goes wrong, the tool says so in plain words in a file call
    ```
 
 3. **Check the login file exists.** It's called `.env` and lives in the `upload_workflow`
-   folder. If it's missing, make it from the example and put in the portal username and password,
-   and the Slack token:
+   folder. If it's missing, make it from the example and put in a username and password for each
+   portal, and the Slack token:
 
    ```bash
    cp upload_workflow/.env.example upload_workflow/.env
@@ -58,8 +61,10 @@ written. If something goes wrong, the tool says so in plain words in a file call
    It has these lines (lines starting with `#` are notes):
 
    ```
-   portalUser=the.portal.account@example.com
-   portalPass=the-password
+   devPortalUser=the.dev.account@example.com
+   devPortalPass=the-dev-password
+   prodPortalUser=the.prod.account@example.com
+   prodPortalPass=the-prod-password
    duoliauthtoken=xoxb-the-slack-bot-token
    ```
 
@@ -145,10 +150,19 @@ conda activate ProjectIngestion
 It prints its progress as `[1/7]` to `[7/7]`. It takes about a minute. When it ends, go to the
 weekly routine above, Step 1.
 
+**For the prod portal**, add `--env prod`:
+
+```bash
+./run_weekly.sh --env prod
+```
+
+Don't do this until the data team has done the first prod load with you (Procedure C).
+
 ### Procedure B: check what would be uploaded, without uploading
 
 ```bash
-./run_weekly.sh --dry-run
+./run_weekly.sh --dry-run              # dev
+./run_weekly.sh --env prod --dry-run   # prod
 ```
 
 This does everything except the upload. `msg.md` then says 🟢 *dry run* and how many records
@@ -163,6 +177,9 @@ size limit, so it is run with `--force`:
 ./run_source.sh PHAC --dry-run --force    # 1. check the numbers first
 ./run_source.sh PHAC --force              # 2. upload and validate
 ```
+
+For prod, add `--env prod` to both commands. Prod gets the source's full history, which for PHAC
+is about 51,000 records, so plan the prod first load with the data team.
 
 Then do the weekly routine (Steps 1–4) to review and commit it.
 
@@ -253,6 +270,9 @@ website afterwards (the weekly routine above).
    0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
    ```
 
+   This runs against the portal set by `PORTAL_ENV` in `pipeline.conf` (dev). To schedule prod
+   instead, put `--env prod` right after `run_weekly.sh`.
+
    The five values at the start are *minute, hour, day of month, month, day of week*. `0 9 * * 1`
    means "at 09:00, every month, on Mondays" (0 = Sunday, 1 = Monday … 6 = Saturday). To run
    on Tuesdays at 08:30 instead, use `30 8 * * 2`. Lines starting with `#` are notes and are
@@ -298,7 +318,8 @@ message, or the data team asks about a submission.
 ```bash
 cd /mnt/d/OneDrive/ProjectIngestion
 conda activate ProjectIngestion
-python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST
+python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST                   # dev
+PORTAL_ENV=prod python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST   # prod
 ```
 
 | Line | Means |
@@ -321,17 +342,20 @@ grep SUBMISSION_URL runs/*/*/status.env
 ```
 
 Each line looks like `runs/<date>-<time>/<SOURCE>/status.env:SUBMISSION_URL=https://…`. The
-folder name is when the run started, so the last line is the newest upload. That run's message is
-in `runs/<date>-<time>/msg.md`.
+folder name is when the run started, so the last line is the newest upload. The link shows the
+portal: `dev.virusseq-dataportal.ca` is dev, `imicroseq-dataportal.ca` is prod. That run's message
+is in `runs/<date>-<time>/msg.md`.
 
-**Open a submission by its number:** go to
-`https://dev.virusseq-dataportal.ca/submission/environmental/<number>`, replacing `<number>`, and
-log in if asked.
+**Open a submission by its number** (replace `<number>`, and log in if asked):
+
+- dev: `https://dev.virusseq-dataportal.ca/submission/environmental/<number>`
+- prod: `https://imicroseq-dataportal.ca/submission/environmental/<number>`
 
 **Check a submission's status and errors in the terminal:**
 
 ```bash
-python upload_workflow/step6_validate.py --submission-id <number> --details
+python upload_workflow/step6_validate.py --submission-id <number> --details                   # dev
+PORTAL_ENV=prod python upload_workflow/step6_validate.py --submission-id <number> --details   # prod
 ```
 
 It prints the submission's `status` and its record counts. For an INVALID submission, it ends
@@ -361,7 +385,8 @@ open, the tool uploads nothing new for that source, so closing it is how you sta
    ```bash
    cd /mnt/d/OneDrive/ProjectIngestion
    conda activate ProjectIngestion
-   python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST
+   python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST                   # dev
+   PORTAL_ENV=prod python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST   # prod
    ```
 
    Note the `PENDING_ID` number.
@@ -370,13 +395,15 @@ open, the tool uploads nothing new for that source, so closing it is how you sta
    `data_ETL/`:
 
    ```bash
-   ./close_submission.sh PHAC
+   ./close_submission.sh PHAC              # dev
+   ./close_submission.sh PHAC --env prod   # prod
    ```
 
 3. **Confirm.** The script shows the open submission and asks for its number:
 
 ```
-Open submission for PHAC-AUTOINGEST:
+Portal: dev · organization PHAC-AUTOINGEST · category imicroseq_wastewater
+Open submission for PHAC-AUTOINGEST on dev:
   number:  <number>
   status:  INVALID
   created: 2026-10-30T18:24:19.424Z
@@ -385,8 +412,8 @@ Closing discards it and everything staged in it. Published records are not affec
 Type <number> to close it, or press Enter to cancel:
 ```
 
-   Check the number matches the one from step 1. Then type it and press **Enter** to close it,
-   or just press **Enter** to cancel (nothing changes).
+   Check the portal and the number match step 1. Then type the number and press **Enter** to
+   close it, or just press **Enter** to cancel (nothing changes).
 
 4. **Check it worked.** It should end with:
 
@@ -415,8 +442,8 @@ Type <number> to close it, or press Enter to cancel:
 |---|---|---|
 | `conda: command not found` | Terminal not set up for conda | Close and reopen the terminal, then retry |
 | `another pipeline run is in progress` | A run is already going (maybe the scheduled one) | Wait a few minutes and try again |
-| 🔴 *run failed during login* | Wrong or expired portal password in `upload_workflow/.env` | Update the password (see "Before you start", step 3) |
-| 🔴 *no write permission for …* | The portal account lost or never had access | Ask the portal administrators to grant it |
+| 🔴 *run failed during login* | Wrong or expired password for that portal (`devPortalPass` or `prodPortalPass` in `upload_workflow/.env`) | Update the password (see "Before you start", step 3) |
+| 🔴 *no write permission for …* / FYI *the account can't write to …* | That portal's account lost or never had access. On prod it hasn't been granted yet. | Ask the portal administrators to grant it |
 | 🔴 *run failed during pending check* / *portal snapshot* | The portal is down or unreachable | Try again later (Procedure A) |
 | 🔴 *run failed during ETL* | The source's website is down or changed its file | Try later; if it repeats, tell the data team |
 | `msg.md` didn't change | The run didn't happen: the PC was off, WSL was closed, or cron wasn't started | Run it by hand (Procedure A). Check the schedule with `crontab -l` and `service cron status` (Procedure J), and look at `runs/cron.log` |

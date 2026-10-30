@@ -18,13 +18,17 @@ folders under `data_ETL/`. PHAC (NWMP) is the first one.
    - Commits are done by a person on the portal website, in dev and prod.
    - The pipeline only uploads and validates. `upload_workflow/main.py` has no commit path, and
      `step7_commit.py` was deliberately not carried over; don't add either back.
-   - **Ask before every upload to dev, and before closing (discarding) any submission there**,
-     while developing or testing. `--dry-run` is the safe way to exercise the pipeline.
+   - **Ask before every upload, and before closing (discarding) any submission**, on dev or
+     prod, while developing or testing. `--dry-run` is the safe way to exercise the pipeline.
    - Closing an open submission is the operator's call (`close_submission.sh`). It never touches
      published records.
    - "Commit" here means publishing on the portal. Git commits and pushes are separate and fine.
-2. **Dev only** until the owner says prod. The only portal is `dev.virusseq-dataportal.ca` (its
-   `ego.dev.` and `submission-service.dev.` hosts). Don't contact any other portal host.
+2. **Two portals: dev and prod.** Dev is `dev.virusseq-dataportal.ca`; prod is
+   `imicroseq-dataportal.ca` (since 2026-10-30). Don't contact any other portal host.
+   - Dev stays the default (`PORTAL_ENV="dev"` in `pipeline.conf`). Prod only via `--env prod`.
+   - Hosts live only in `upload_workflow/portal_env.py`; scripts read `$PORTAL_ENV`.
+   - **Nothing has been uploaded to prod.** Don't upload or close anything on prod without the
+     owner's explicit go-ahead for that specific action. Reads and `--dry-run` are fine.
 3. **Stay inside this folder.** Ask before using any temp directory, `/tmp` included. Working files
    go in `runs/`.
 4. **Use the conda env `ProjectIngestion`** (`environment.yaml`). Keep `environment.yaml` and
@@ -47,7 +51,7 @@ folders under `data_ETL/`. PHAC (NWMP) is the first one.
 run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
 run_source.sh          one source: pending check -> ETL -> date window -> snapshot -> diff -> guard -> upload+validate
 close_submission.sh    discard a source's open submission (asks for its number) so a new one can start
-pipeline.conf          DEV_MIN_START_DATE (dev date window), DEFAULT_MAX_NEW, SLACK_CHANNEL
+pipeline.conf          PORTAL_ENV (default portal), DEV_/PROD_MIN_START_DATE, DEFAULT_MAX_NEW, SLACK_CHANNEL
 data_ETL/<SOURCE>/     source.conf + etl.sh (+ scripts/, raw/, curated/)
 data_ETL/_template/    copy-me skeleton for a new source
 upload_workflow/       portal API scripts (step1-6, main.py) + pipeline helpers
@@ -78,10 +82,18 @@ exists, the run stops before doing any work and reminds the person to commit or 
 conda activate ProjectIngestion
 ./run_source.sh PHAC --dry-run      # safe: everything except the upload
 ./run_weekly.sh --dry-run
+./run_weekly.sh --env prod --dry-run   # the same against prod (reads only)
 bash data_ETL/PHAC/etl.sh           # ETL only
 ```
 
-## Portal gotchas (Overture Lyric 0.3.0 on dev)
+## Portal gotchas (Overture Lyric 0.3.0, dev and prod)
+
+- **The portals differ in names, not schema.** Prod's submission host is `submissions.`, not
+  `submission-service.`. Its category is `imicroseq_environmental` (id 1); dev's is
+  `imicroseq_wastewater` (id 3). The dictionary is the same: v1.17, 163 fields. Sources set
+  `CATEGORY_DEV` / `CATEGORY_PROD`.
+- **Each portal has its own account** in `.env` (`devPortalUser`… / `prodPortalUser`…). Its scopes
+  differ: on 2026-10-30, prod only had `WW-TEST.*`, no `WW-PHAC-AUTOINGEST.WRITE`.
 
 - **Organization = Ego scope minus `WW-`.** Scope `WW-PHAC-AUTOINGEST.WRITE` → org
   `PHAC-AUTOINGEST`. It is case-sensitive. A wrong org gives a generic 403. Tokens are snapshots:
@@ -97,9 +109,9 @@ bash data_ETL/PHAC/etl.sh           # ETL only
 - Reads (`/data/...`, `/dictionary/...`, `/category`) need no token. Writes do, and so does the
   per-user submission listing.
 
-## Going to prod (only when the owner says so)
+## Prod: what's still open
 
-- Change the dev URLs in `upload_workflow/common.py` (2) and `upload_workflow/getToken.py` (1).
-- Decide on `DEV_MIN_START_DATE`.
-- A full-history first load (~50k PHAC records) may need chunked uploads.
+- The prod account needs `WW-PHAC-AUTOINGEST.WRITE` (portal admins).
+- The first prod load is the full history (51,224 PHAC records). That's over `MAX_NEW`, so it
+  needs `--force`, and may need chunked uploads. It's untested.
 - Commits stay manual on the website.

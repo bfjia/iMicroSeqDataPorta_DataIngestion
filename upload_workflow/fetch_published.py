@@ -26,7 +26,7 @@ import os
 
 import requests
 
-from common import buildParser, raiseForStatus, resolveToken
+from common import DefaultCategory, buildParser, raiseForStatus, resolveToken
 from step2_category import resolveCategory
 from step3_dictionary import fetchDictionary, selectSchema
 
@@ -108,7 +108,7 @@ def writeCsv(path, columns, rows):
 
 if __name__ == "__main__":
     parser = buildParser("Download an organization's published records as a baseline CSV.")
-    parser.add_argument("--category", default="imicroseq_wastewater", help="Category name or id")
+    parser.add_argument("--category", default=DefaultCategory, help="Category name or id")
     parser.add_argument("--organization", required=True, help="Organization, e.g. PHAC-AUTOINGEST")
     parser.add_argument("--entity", default=None, help="Entity name. Defaults to the only schema.")
     parser.add_argument("--output", required=True, help="Where to write the baseline CSV")

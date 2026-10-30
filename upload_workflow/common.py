@@ -12,13 +12,17 @@ import time
 
 import requests
 
-# endpoints
-DefaultBaseURL = "https://submission-service.dev.virusseq-dataportal.ca"
+from portal_env import settings as portalSettings
+
+# endpoints: dev or prod, picked by $PORTAL_ENV (see portal_env.py)
+PortalEnv = portalSettings()["name"]
+DefaultBaseURL = portalSettings()["submissionService"]
+DefaultCategory = portalSettings()["category"]  # default --category for the CLIs
 
 # Where a submission is reviewed in the portal UI. Its status column explains
 # what failed, so a submission that does not validate is handed to the user as
 # this link rather than as errors reproduced in the terminal.
-DefaultPortalURL = "https://dev.virusseq-dataportal.ca/submission/environmental/{submissionId}"
+DefaultPortalURL = portalSettings()["portalUrl"]
 
 DefaultPollInterval = 3.0
 DefaultTimeout = 600.0

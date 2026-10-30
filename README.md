@@ -9,9 +9,10 @@ portal website**. The pipeline never publishes anything by itself.
 - **Adding a data source?** See **[data_ETL/README.md](data_ETL/README.md)**.
 - **Working on the code?** Read this file and **[CLAUDE.md](CLAUDE.md)** (project rules).
 
-> **Environment:** everything currently points at the **dev** portal
-> (`dev.virusseq-dataportal.ca`), category `imicroseq_wastewater`. Dev only receives records
-> from collection weeks on or after `DEV_MIN_START_DATE` (2026-09-01, set in `pipeline.conf`).
+> **Two portals:** **dev** (`dev.virusseq-dataportal.ca`, the default) and **prod**
+> (`imicroseq-dataportal.ca`). Every script takes `--env dev|prod`; without it, `PORTAL_ENV` in
+> `pipeline.conf` decides. Dev receives collection weeks from 2026-09-01 on; prod gets the full
+> history. See [Dev and prod](#dev-and-prod).
 
 ---
 
@@ -26,6 +27,7 @@ conda activate ProjectIngestion
 ./run_source.sh PHAC --dry-run   # everything except the upload: shows what would be uploaded
 ./run_source.sh PHAC             # upload + validate one source; then commit it on the website
 ./run_weekly.sh                  # every enabled source; this is what the scheduler runs
+./run_weekly.sh --env prod --dry-run   # the same against prod, uploading nothing
 cat msg.md                       # the run's notification: what happened, what to do
 ```
 
@@ -36,7 +38,7 @@ ProjectIngestion/
 ├── run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
 ├── run_source.sh          one source end to end (steps 1-8 below)
 ├── close_submission.sh    discard a source's open (uncommitted) submission to start over
-├── pipeline.conf          pipeline-wide settings (dev date window, size limit, Slack channel)
+├── pipeline.conf          pipeline-wide settings (default portal, date windows, size limit, Slack)
 ├── msg.md                 latest notification digest (every run; posted to Slack; gitignored)
 ├── SOP.md                 plain-language procedure
 ├── CLAUDE.md              project rules for contributors
@@ -59,7 +61,7 @@ flowchart TD
     S --> P1["1. Pending check<br/>login, then: is a submission still open?"]
     P1 -->|"yes"| STOPW([stop: remind to commit / fix])
     P1 -->|"no"| P2["2. ETL<br/>data_ETL/SOURCE/etl.sh"]
-    P2 --> P3["3. Date window<br/>keep weeks ≥ DEV_MIN_START_DATE"]
+    P2 --> P3["3. Date window<br/>keep weeks ≥ DEV_ / PROD_MIN_START_DATE"]
     P3 --> P4["4. Portal snapshot<br/>what the org already published"]
     P4 --> P5["5. Diff<br/>new / changed / unchanged"]
     P5 --> P6{"6. Size guard<br/>new = 0? new > MAX_NEW?"}
@@ -88,9 +90,9 @@ finishes.
 | **What** | Logs in, then asks the portal whether a submission is still open for the source's organization. If one is, the run stops before downloading anything. |
 | **Why** | Commits happen on the website, so last week's submission may still be waiting: VALID and not yet committed, or INVALID and not yet fixed. Uploading again would *append* to it and stage every record twice. New records simply go up on the first run after it is committed. |
 | **Scripts** | `upload_workflow/step1_token.py` (login, via `getToken.py` and `upload_workflow/.env`), then `upload_workflow/check_pending.py` |
-| **Portal calls** | Ego/Keycloak login on `ego.dev.virusseq-dataportal.ca`; `GET /category`; `GET /submission/category/{id}?onlyActive=true&organization=…` |
+| **Portal calls** | Ego/Keycloak login on `ego.<portal>` with that portal's account from `.env`; `GET /category`; `GET /submission/category/{id}?onlyActive=true&organization=…` |
 | **Output** | `status.env` gets `PENDING_*` values when something is open |
-| **Also checks** | that the token carries the scope `WW-<ORG>.WRITE` (the organization's write permission) |
+| **Also checks** | that the token carries the scope `WW-<ORG>.WRITE` (the organization's write permission). Missing → `failed`; in a `--dry-run` it's only a warning plus an FYI line, so you can still see what would be uploaded. |
 | **Fails as** | `waiting` (🟡 VALID, waiting for a commit), `waiting_invalid` (🔴 INVALID, waiting for a fix), `failed` (🔴 login, network or permission problem) |
 | **Run alone** | `python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST` |
 
@@ -113,7 +115,7 @@ stops. It never assumes nothing is pending.
 
 | | |
 |---|---|
-| **What** | Keeps only rows whose `sample collection start date` is on or after `DEV_MIN_START_DATE` (`pipeline.conf`). While a cutoff is set, rows with no valid date are dropped too. |
+| **What** | Keeps only rows whose `sample collection start date` is on or after the portal's cutoff in `pipeline.conf`: `DEV_MIN_START_DATE` (2026-09-01) or `PROD_MIN_START_DATE` (empty: full history). While a cutoff is set, rows with no valid date are dropped too. |
 | **Why** | Dev doesn't need every source's full history. An empty value means no cutoff. |
 | **Script** | `upload_workflow/filter_rows.py` |
 | **Input → output** | `UPLOAD_CSV` → `in_scope.csv`. The log shows `kept=… before_cutoff=… undated=…`. |
@@ -233,19 +235,21 @@ log.
 ## Commands and options
 
 ```
-./run_source.sh <SOURCE> [--dry-run] [--force] [--holdout-weeks N] [--holdout-random N] [--keep-work]
-./run_weekly.sh [--dry-run]
-./close_submission.sh <SOURCE> [--yes]
+./run_source.sh <SOURCE> [--env dev|prod] [--dry-run] [--force] [--holdout-weeks N] [--holdout-random N] [--keep-work]
+./run_weekly.sh [--env dev|prod] [--dry-run]
+./close_submission.sh <SOURCE> [--env dev|prod] [--yes]
 ```
 
 | Option | Effect |
 |---|---|
+| `--env dev\|prod` | Which portal. Without it, `PORTAL_ENV` in `pipeline.conf` (dev). |
 | `--dry-run` | Every step except the upload. It still logs in and reads from the portal. |
 | `--force` | Upload even if new > `MAX_NEW` (first loads, known backfills) |
 | `--holdout-weeks N` / `--holdout-random N` | TEST ONLY: hold back rows to create a delta for the next run |
 | `--keep-work` | Keep `in_scope.csv`, `published.csv` and `submit/` |
 
-`run_weekly.sh` runs every folder in `data_ETL/` that has a `source.conf` with `ENABLED=1`.
+`run_weekly.sh` runs every folder in `data_ETL/` that has a `source.conf` with `ENABLED=1` (or
+`ENABLED_DEV` / `ENABLED_PROD` for that portal).
 Folders starting with `_` are skipped. A failing source doesn't stop the others. Its exit code is 1
 if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
 
@@ -268,7 +272,9 @@ only way short of `main.py --replace`.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `DEV_MIN_START_DATE` | `2026-09-01` | Only weeks on or after this date are uploaded. `""` = no cutoff. |
+| `PORTAL_ENV` | `dev` | Portal used when no `--env` is given, including by the scheduler: `dev` or `prod` |
+| `DEV_MIN_START_DATE` | `2026-09-01` | Dev: only weeks on or after this date are uploaded. `""` = no cutoff. |
+| `PROD_MIN_START_DATE` | `""` | Prod: the same, empty = full history |
 | `DEFAULT_MAX_NEW` | `2000` | Size guard for sources that don't set `MAX_NEW` |
 | `SLACK_CHANNEL` | `C0CDQRKNWFK` | Slack channel ID that gets `msg.md` after each run (#_integration_notifications). `""` = don't post. |
 
@@ -278,14 +284,18 @@ only way short of `main.py --replace`.
 |---|---|---|
 | `SOURCE_ID` | `PHAC-NWMP` | Name used for run folders and messages |
 | `ORGANIZATION` | `PHAC-AUTOINGEST` | Portal organization: the Ego scope `WW-PHAC-AUTOINGEST.WRITE` minus `WW-` |
-| `CATEGORY` | `imicroseq_wastewater` | Portal category (id 3 on dev) |
+| `CATEGORY_DEV` / `CATEGORY_PROD` | `imicroseq_wastewater` / `imicroseq_environmental` | Portal category. The two portals name it differently (same dictionary). |
 | `UPLOAD_CSV` | `curated/PHAC-NWMP.dedup.csv` | What `etl.sh` writes, relative to the source folder |
 | `MAX_NEW` | `2000` | Size guard |
 | `ENABLED` | `1` | `0` = `run_weekly.sh` skips the source |
 
-**`upload_workflow/.env`** (never committed): `portalUser=…` and `portalPass=…` for the portal
-account, and `duoliauthtoken=…`, the Slack bot's OAuth token (only needed when `SLACK_CHANNEL` is
-set). `.env.example` shows the format.
+Any of `ORGANIZATION`, `CATEGORY`, `MAX_NEW` and `ENABLED` can be given per portal with a `_DEV`
+or `_PROD` suffix. The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a new source on
+dev only.
+
+**`upload_workflow/.env`** (never committed): one login per portal, `devPortalUser` /
+`devPortalPass` and `prodPortalUser` / `prodPortalPass`, and `duoliauthtoken`, the Slack bot's
+OAuth token (only needed when `SLACK_CHANNEL` is set). `.env.example` shows the format.
 
 ## Scheduling the weekly run
 
@@ -315,19 +325,40 @@ scheduler itself sees; each run's full log is in `runs/<stamp>/weekly.log`.
 `run_weekly.sh` activates the `ProjectIngestion` conda env by itself. It looks for `$CONDA_EXE`,
 falling back to `~/miniconda3/bin/conda`.
 
-## Moving to prod (later, only when decided)
+## Dev and prod
 
-1. Change the dev URLs in `upload_workflow/common.py` (`DefaultBaseURL`, `DefaultPortalURL`) and
-   `upload_workflow/getToken.py` (`BaseURL`).
-2. Decide whether `DEV_MIN_START_DATE` stays or is cleared (full history).
-3. Plan the first load. About 50k PHAC records may need to go up in chunks.
+The portal is chosen per run: `--env dev|prod`, else `PORTAL_ENV` in `pipeline.conf` (`dev`). The
+bash scripts export it as `$PORTAL_ENV`, and every Python script reads it through
+`upload_workflow/portal_env.py`, the one place the hosts live. To run a Python script on its own
+against prod: `PORTAL_ENV=prod python upload_workflow/check_pending.py --organization …`.
 
-Commits stay manual on the website.
+| | dev | prod |
+|---|---|---|
+| Website | `dev.virusseq-dataportal.ca` | `imicroseq-dataportal.ca` |
+| Submission service | `submission-service.dev.virusseq-dataportal.ca` | `submissions.imicroseq-dataportal.ca` |
+| Login | `ego.dev…` → `keycloak.dev…` | `ego.imicroseq-dataportal.ca` → `keycloak.imicroseq-dataportal.ca` |
+| Category | `imicroseq_wastewater` (id 3) | `imicroseq_environmental` (id 1) |
+| Dictionary | `imicroseq_wastewater` v1.17, 163 fields | identical (checked 2026-10-30) |
+| Account (`.env`) | `devPortalUser` / `devPortalPass` | `prodPortalUser` / `prodPortalPass` |
+| Date window | from 2026-09-01 | full history |
+| Review link | `https://dev.virusseq-dataportal.ca/submission/environmental/<id>` | `https://imicroseq-dataportal.ca/submission/environmental/<id>` |
+
+**Prod status (2026-10-30).** Nothing has been uploaded to prod.
+
+- **No write permission yet:** the prod account only has `WW-TEST.WRITE`, not
+  `WW-PHAC-AUTOINGEST.WRITE`. Until the portal admins grant it, a prod upload stops at the
+  permission check. A `--dry-run` only warns.
+- **First load:** a prod dry run finds all 51,224 PHAC records as new. That is over `MAX_NEW`, so
+  it needs `--force`. A single upload that size is untested and may need splitting into chunks.
+
+Commits stay manual on the website, in both portals. `runs/`, `msg.md` and the Slack channel are
+shared by both; the run log, `status.env` (`PORTAL_ENV`) and the `msg.md` headline say which portal
+a run used.
 
 ## Known limitations
 
 - **Revised records are reported, not re-uploaded.** PHAC sometimes revises past weeks, often the
   most recent one, which is usually partial. Those show up as "changed" FYIs. The portal has an
   edit endpoint (`PUT /submission/category/{id}/data`) that could carry them later.
-- **First loads are a single upload.** That is fine for the dev window (~2.5k records), but the
-  prod first load needs planning.
+- **First loads are a single upload.** That is fine for the dev window (~1.4k records), but the
+  prod first load (~51k) needs planning.

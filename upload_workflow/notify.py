@@ -25,7 +25,7 @@ import datetime
 import os
 import shutil
 
-from common import DefaultBaseURL
+from common import PortalEnv
 
 RepoDir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DateColumn = "sample collection start date"
@@ -159,6 +159,9 @@ def section(s, folder):
             missing = [l.strip() for l in handle if l.strip()]
         if missing:
             out.append("- FYI: missing values, please supply: " + "; ".join(missing))
+    if s.get("NO_WRITE_SCOPE") == "1":
+        out.append(f"- FYI: the account can't write to {s.get('ORGANIZATION', 'this organization')} "
+                   "on this portal yet; a real run would stop")
     held = s.get("HELD_OUT", "0")
     if held not in ("", "0"):
         out.append(f"- FYI: test mode, {num(held)} records held back")
@@ -173,7 +176,7 @@ def build(runDir):
         os.path.join(runDir, d) for d in os.listdir(runDir)
         if os.path.isfile(os.path.join(runDir, d, "status.env"))
     )
-    env = "dev" if ".dev." in DefaultBaseURL else "prod"
+    env = PortalEnv
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
     if not folders:

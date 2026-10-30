@@ -21,7 +21,7 @@ Prints shell-friendly KEY=VALUE lines (or JSON with --json):
 
 import json
 
-from common import DefaultPortalURL, buildParser, resolveToken
+from common import DefaultCategory, DefaultPortalURL, buildParser, resolveToken
 from step1_token import hasWriteScope
 from step2_category import resolveCategory
 from step5_upload import findActiveSubmission
@@ -47,7 +47,7 @@ def checkPending(baseUrl, token, category, organization, portalUrl=DefaultPortal
 
 if __name__ == "__main__":
     parser = buildParser("Check whether a submission is still open for an organization.")
-    parser.add_argument("--category", default="imicroseq_wastewater", help="Category name or id")
+    parser.add_argument("--category", default=DefaultCategory, help="Category name or id")
     parser.add_argument("--organization", required=True, help="Organization, e.g. PHAC-AUTOINGEST")
     parser.add_argument("--portal-url", default=DefaultPortalURL, help="Review link template")
     parser.add_argument("--json", action="store_true", help="Print JSON instead of KEY=VALUE")
