@@ -262,12 +262,17 @@ schtasks /Create /TN "iMicroSeq weekly ingestion" /SC WEEKLY /D MON /ST 09:00 ^
   /TR "wsl.exe -d <Distro> -- bash -lc '/mnt/d/OneDrive/ProjectIngestion/run_weekly.sh'"
 ```
 
-**cron inside WSL.** This only fires while WSL is running, and the cron service must be started,
-or systemd enabled in `/etc/wsl.conf`:
+**cron inside WSL.** This only fires while WSL is running. This WSL has no systemd, so the cron
+service has to be started after every WSL restart (`sudo service cron start`), unless systemd is
+enabled in `/etc/wsl.conf`. Step-by-step for operators: `SOP.md`, Procedure J.
 
 ```
-0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly.sh
+0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
 ```
+
+cron gives the script a bare environment (`PATH=/usr/bin:/bin`, no conda, working directory
+`$HOME`). This was tested with `env -i` and works. `runs/cron.log` only captures what the
+scheduler itself sees; each run's full log is in `runs/<stamp>/weekly.log`.
 
 `run_weekly.sh` activates the `ProjectIngestion` conda env by itself. It looks for `$CONDA_EXE`,
 falling back to `~/miniconda3/bin/conda`.

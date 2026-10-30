@@ -68,8 +68,8 @@ written. If something goes wrong, the tool says so in plain words in a file call
 
 ## The weekly routine
 
-Once a week the tool runs by itself, or you run it by hand (Procedure A). After every run, do
-this:
+Once a week the tool runs by itself (once it's scheduled, Procedure J), or you run it by hand
+(Procedure A). After every run, do this:
 
 ### Step 1. Open the message
 
@@ -214,6 +214,67 @@ Something broke: the internet, the portal being down, the login, or a change at 
 once more later with Procedure A. If it fails again, send the data team the whole 🔴 section of
 `msg.md` and the `Log:` file it names.
 
+### Procedure J: run it automatically every week (crontab)
+
+This makes the computer start the weekly run by itself. You still read `msg.md` and commit on the
+website afterwards (the weekly routine above).
+
+> **Know the limits first.** cron only works while the PC is on **and** a WSL (Ubuntu) window is
+> open. If the PC is off or WSL is closed at the scheduled time, that week's run is simply
+> skipped; do it by hand with Procedure A. For a schedule that works without a WSL window open,
+> ask the data team to set up Windows Task Scheduler instead (see `README.md`).
+
+1. **Open your schedule for editing:**
+
+   ```bash
+   crontab -e
+   ```
+
+   The first time, it asks which editor to use. Type the number next to `nano` and press
+   **Enter**.
+
+2. **Add these two lines at the bottom** of the file. Copy them exactly:
+
+   ```
+   # iMicroSeq weekly ingestion: every Monday at 09:00
+   0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
+   ```
+
+   The five values at the start are *minute, hour, day of month, month, day of week*. `0 9 * * 1`
+   means "at 09:00, every month, on Mondays" (0 = Sunday, 1 = Monday … 6 = Saturday). To run
+   on Tuesdays at 08:30 instead, use `30 8 * * 2`. Lines starting with `#` are notes and are
+   ignored.
+
+3. **Save and exit:** **Ctrl+O**, **Enter**, then **Ctrl+X**.
+
+4. **Check it was saved:**
+
+   ```bash
+   crontab -l
+   ```
+
+   You should see the two lines.
+
+5. **Start the cron service.** On this computer it doesn't start by itself, so **do this every
+   time you open WSL after a restart** of the PC or of WSL:
+
+   ```bash
+   sudo service cron start
+   ```
+
+   It asks for your Ubuntu password. Check it's running with `service cron status`. It should
+   say `cron is running`.
+
+**To check a scheduled run happened:** look at the date on the first line of `msg.md`, or at the
+end of the cron log:
+
+```bash
+tail -n 20 /mnt/d/OneDrive/ProjectIngestion/runs/cron.log
+```
+
+**To stop the schedule:** run `crontab -e` again, put a `#` at the start of the `run_weekly.sh`
+line (or delete both lines), and save.
+
 ---
 
 ## Troubleshooting
@@ -226,7 +287,7 @@ once more later with Procedure A. If it fails again, send the data team the whol
 | 🔴 *no write permission for …* | The portal account lost or never had access | Ask the portal administrators to grant it |
 | 🔴 *run failed during pending check* / *portal snapshot* | The portal is down or unreachable | Try again later (Procedure A) |
 | 🔴 *run failed during ETL* | The source's website is down or changed its file | Try later; if it repeats, tell the data team |
-| `msg.md` didn't change | The run didn't happen | Run it by hand (Procedure A) and check that the schedule is still set up |
+| `msg.md` didn't change | The run didn't happen: the PC was off, WSL was closed, or cron wasn't started | Run it by hand (Procedure A). Check the schedule with `crontab -l` and `service cron status` (Procedure J), and look at `runs/cron.log` |
 
 ## When to ask for help
 
