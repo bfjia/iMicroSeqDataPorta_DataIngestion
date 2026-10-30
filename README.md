@@ -270,7 +270,7 @@ only way short of `main.py --replace`.
 |---|---|---|
 | `DEV_MIN_START_DATE` | `2026-09-01` | Only weeks on or after this date are uploaded. `""` = no cutoff. |
 | `DEFAULT_MAX_NEW` | `2000` | Size guard for sources that don't set `MAX_NEW` |
-| `SLACK_CHANNEL` | `C088LULD5PY` | Slack channel ID that gets `msg.md` after each run (#duotang-integrations). `""` = don't post. |
+| `SLACK_CHANNEL` | `C0CDQRKNWFK` | Slack channel ID that gets `msg.md` after each run (#_integration_notifications). `""` = don't post. |
 
 **`data_ETL/<SOURCE>/source.conf`**:
 
