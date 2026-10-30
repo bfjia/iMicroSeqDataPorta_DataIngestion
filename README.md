@@ -247,7 +247,7 @@ if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
 |---|---|---|
 | `DEV_MIN_START_DATE` | `2026-09-01` | Only weeks on or after this date are uploaded. `""` = no cutoff. |
 | `DEFAULT_MAX_NEW` | `2000` | Size guard for sources that don't set `MAX_NEW` |
-| `SLACK_CHANNEL` | `""` | Slack channel ID (e.g. `C0123456789`) that gets `msg.md` after each run. `""` = don't post. |
+| `SLACK_CHANNEL` | `C088LULD5PY` | Slack channel ID that gets `msg.md` after each run (#duotang-integrations). `""` = don't post. |
 
 **`data_ETL/<SOURCE>/source.conf`**:
 

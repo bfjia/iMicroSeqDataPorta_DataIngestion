@@ -76,8 +76,8 @@ Once a week the tool runs by itself (once it's scheduled, Procedure J), or you r
 
 ### Step 1. Open the message
 
-If Slack is set up, the message arrives in the team's Slack channel after every run (but not
-after a dry run). It's also always saved as `msg.md` in the tool's folder. Open it in VS Code, or
+The message arrives in the Slack channel **#duotang-integrations** after every run (but not after
+a dry run). It's also always saved as `msg.md` in the tool's folder. Open it in VS Code, or
 in the terminal with:
 
 ```bash
