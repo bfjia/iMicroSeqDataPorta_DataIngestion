@@ -1,4 +1,4 @@
-"""Write the run's notification digest, msg.md (placeholder for Slack).
+"""Write the run's notification digest, msg.md (slack_post.py posts it to Slack).
 
 One message per run, never one per step. run_source.sh leaves a status.env in
 each source's run folder; this reads them all and writes a single Markdown
@@ -11,8 +11,8 @@ digest:
     test hold-backs) that never change the headline on their own.
 
 A quiet week still produces one short message, so silence never has to be read
-as "did it run?". The file is plain Markdown so a later Slack step can post it
-as-is (or convert it).
+as "did it run?". The file is plain Markdown; slack_post.py converts it for
+Slack.
 
     python notify.py --run-dir runs/20261030-081500 --out runs/20261030-081500/msg.md --copy-to msg.md
 """

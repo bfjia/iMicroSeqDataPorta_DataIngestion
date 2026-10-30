@@ -23,12 +23,17 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_NAME="ProjectIngestion"
 
 SOURCE_ARGS=()
+DRY_RUN=0
 case "${1:-}" in
     "")        ;;
-    --dry-run) SOURCE_ARGS=(--dry-run) ;;
+    --dry-run) SOURCE_ARGS=(--dry-run); DRY_RUN=1 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *)         echo "Unknown option: $1 (only --dry-run is accepted)" >&2; exit 2 ;;
 esac
+
+SLACK_CHANNEL=""
+# shellcheck source=pipeline.conf
+source "${REPO_DIR}/pipeline.conf"
 
 # --- Conda environment (a scheduler starts with a bare shell) -------------
 activateEnv() {
@@ -91,4 +96,12 @@ echo
 python "${REPO_DIR}/upload_workflow/notify.py" --run-dir "${INGEST_RUN_DIR}" \
     --out "${INGEST_RUN_DIR}/msg.md" --copy-to "${REPO_DIR}/msg.md"
 echo "== Weekly run finished $(date '+%Y-%m-%d %H:%M:%S'); notification in msg.md"
+
+# --- Post it to Slack: once per run, never for a dry run ------------------
+# A failed post doesn't change the run's outcome; msg.md is still written.
+if [[ -n "${SLACK_CHANNEL}" && "${DRY_RUN}" -eq 0 ]]; then
+    python "${REPO_DIR}/upload_workflow/slack_post.py" --file "${INGEST_RUN_DIR}/msg.md" \
+        --channel "${SLACK_CHANNEL}" \
+        || echo "WARNING: msg.md was written but could not be posted to Slack (error above)"
+fi
 exit "${ANY_PROBLEM}"

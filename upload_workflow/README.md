@@ -39,7 +39,7 @@ them from anywhere with the `ProjectIngestion` env active.
 | `step3_dictionary.py` | Fetches the dictionary and builds the map from CSV title to field name | `GET /dictionary/category/{id}` | `python step3_dictionary.py --category-id 3` |
 | `step4_transform.py` | Renames the CSV headers to field names, writing `sample.csv`. An unknown column is a hard error. | dictionary only | `python step4_transform.py --input delta.csv --output-dir out/` |
 | `step5_upload.py` | Uploads a file, opening a submission. `--replace` discards an open one first. | `GET /submission/category/{id}?onlyActive=true`, `DELETE /submission/{id}`, `POST /submission/category/{id}/data` | (normally via `main.py`) |
-| `step6_validate.py` | Polls until validation settles. `--details` prints per-record errors. | `GET /submission/{id}` (event stream), `GET /submission/{id}/details` | `python step6_validate.py --submission-id 412 --details` |
+| `step6_validate.py` | Polls until validation settles. `--details` prints per-record errors. | `GET /submission/{id}` (event stream), `GET /submission/{id}/details` | `python step6_validate.py --submission-id <number> --details` |
 | `main.py` | Runs steps 1–6 and stops. On VALID it prints the website link to commit. On INVALID it prints the link to the errors. `--result-json` writes the outcome for scripts. | all of the above | `python main.py --input delta.csv --organization PHAC-AUTOINGEST` |
 | `common.py` | Shared HTTP, polling and token helpers, and the **dev URLs** (`DefaultBaseURL`, `DefaultPortalURL`) | | |
 
@@ -57,6 +57,7 @@ submission. Without `--work-dir`, its working files go in `runs/main-<timestamp>
 | `diff_new_records.py` | 5 | Splits the curated rows into new / changed / unchanged against the published snapshot. Numbers are compared numerically (rel. 1e-6). A duplicate sample ID is a hard error. Prints `new= changed= unchanged=`. | `python diff_new_records.py --new a.csv --baseline published.csv --new-out delta.csv --changed-out changed.csv` |
 | `holdout_rows.py` | 5 | **Test only.** Holds back the newest N weeks plus N random older rows, to create a delta for the next run | `python holdout_rows.py --input delta.csv --output kept.csv --held-out held.csv --latest-weeks 1 --random 10` |
 | `notify.py` | 8 | Builds the run's single `msg.md` digest from each source's `status.env` | `python notify.py --run-dir runs/<stamp> --out msg.md` |
+| `slack_post.py` | 8 | Posts `msg.md` to Slack (`chat.postMessage`) after converting it to Slack markdown. Token: `duoliauthtoken` in `.env`; the bot must be in the channel. `--print` shows the text and sends nothing. Modeled on `old/duoli.py`. | `python slack_post.py --file ../msg.md --channel C0123456789` |
 
 ## Things that will bite you
 
@@ -92,5 +93,5 @@ token. Uploads (and the per-user listing) need one.
 ## Requirements
 
 - The `ProjectIngestion` conda env (`../environment.yaml`).
-- `upload_workflow/.env` with `portalUser` and `portalPass`. Copy `.env.example`. It is never
-  committed.
+- `upload_workflow/.env` with `portalUser` and `portalPass`, plus `duoliauthtoken` (the Slack
+  bot token) if Slack is on. Copy `.env.example`. It is never committed.

@@ -20,7 +20,7 @@ portal website**. The pipeline never publishes anything by itself.
 ```bash
 cd /mnt/d/OneDrive/ProjectIngestion
 conda env create -f environment.yaml        # once
-cp upload_workflow/.env.example upload_workflow/.env   # once, then fill in the portal login
+cp upload_workflow/.env.example upload_workflow/.env   # once, then fill in the portal login + Slack token
 conda activate ProjectIngestion
 
 ./run_source.sh PHAC --dry-run   # everything except the upload: shows what would be uploaded
@@ -35,8 +35,8 @@ cat msg.md                       # the run's notification: what happened, what t
 ProjectIngestion/
 ├── run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
 ├── run_source.sh          one source end to end (steps 1-8 below)
-├── pipeline.conf          pipeline-wide settings (dev date window, default size limit)
-├── msg.md                 latest notification digest (written by every run; gitignored)
+├── pipeline.conf          pipeline-wide settings (dev date window, size limit, Slack channel)
+├── msg.md                 latest notification digest (every run; posted to Slack; gitignored)
 ├── SOP.md                 plain-language procedure
 ├── CLAUDE.md              project rules for contributors
 ├── environment.yaml       conda env "ProjectIngestion" (requirements.txt mirrors it for pip)
@@ -165,8 +165,8 @@ stops. It never assumes nothing is pending.
 
 `run_source.sh` records its outcome in `status.env`. `upload_workflow/notify.py` turns all of a
 run's `status.env` files into **one** Markdown digest. It is written to `msg.md` in the repo root
-(overwritten each run) and to `runs/<stamp>/msg.md`. A future Slack integration only has to post
-this file.
+(overwritten each run) and to `runs/<stamp>/msg.md`. Then `upload_workflow/slack_post.py` posts
+it to Slack (see below).
 
 - **Headline:** the worst status across sources: 🔴 problem > 🟡 action needed > 🟢 all good.
 - **One section per source**, showing its most important status only, with counts, collection
@@ -186,6 +186,19 @@ this file.
 | `failed` | 🔴 | A step errored. The message says which, with the last log lines. |
 | `nothing_new` | 🟢 | Everything is already published |
 | `dry_run` | 🟢 | `--dry-run`: nothing uploaded; `delta.csv` shows what would be |
+
+**Slack.** When `SLACK_CHANNEL` is set in `pipeline.conf`, the same digest is posted to that
+channel, once per run, by `run_weekly.sh` (or by `run_source.sh` run on its own). Dry runs never
+post.
+
+- **How it posts:** `slack_post.py` is modeled on `old/duoli.py`. It uses the bot's OAuth token
+  (`duoliauthtoken` in `upload_workflow/.env`) and `chat.postMessage`, with link previews off.
+- **Markdown:** it converts `msg.md` to Slack's markdown. Headings become bold lines, `**bold**`
+  becomes `*bold*`, `-` bullets become `•`, and `&`, `<`, `>` are escaped.
+- **Failures:** a failed post (wrong channel, bot not in the channel, bad token) prints a warning
+  in the log and doesn't change the run's outcome. `msg.md` is still written.
+- **Preview** what would be posted, sending nothing:
+  `python upload_workflow/slack_post.py --file msg.md --print`.
 
 ---
 
@@ -234,6 +247,7 @@ if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
 |---|---|---|
 | `DEV_MIN_START_DATE` | `2026-09-01` | Only weeks on or after this date are uploaded. `""` = no cutoff. |
 | `DEFAULT_MAX_NEW` | `2000` | Size guard for sources that don't set `MAX_NEW` |
+| `SLACK_CHANNEL` | `""` | Slack channel ID (e.g. `C0123456789`) that gets `msg.md` after each run. `""` = don't post. |
 
 **`data_ETL/<SOURCE>/source.conf`**:
 
@@ -247,7 +261,8 @@ if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
 | `ENABLED` | `1` | `0` = `run_weekly.sh` skips the source |
 
 **`upload_workflow/.env`** (never committed): `portalUser=…` and `portalPass=…` for the portal
-account. `.env.example` shows the format.
+account, and `duoliauthtoken=…`, the Slack bot's OAuth token (only needed when `SLACK_CHANNEL` is
+set). `.env.example` shows the format.
 
 ## Scheduling the weekly run
 
@@ -291,6 +306,5 @@ Commits stay manual on the website.
 - **Revised records are reported, not re-uploaded.** PHAC sometimes revises past weeks, often the
   most recent one, which is usually partial. Those show up as "changed" FYIs. The portal has an
   edit endpoint (`PUT /submission/category/{id}/data`) that could carry them later.
-- **No Slack yet:** `msg.md` is the placeholder.
 - **First loads are a single upload.** That is fine for the dev window (~2.5k records), but the
   prod first load needs planning.

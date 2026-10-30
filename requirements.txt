@@ -6,3 +6,4 @@ requests==2.34.2
 python-dotenv==1.2.4
 tqdm==4.70.1
 python-dateutil==3.0.0
+slack-sdk==3.46.0

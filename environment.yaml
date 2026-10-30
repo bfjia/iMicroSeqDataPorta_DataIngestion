@@ -16,3 +16,4 @@ dependencies:
   - python-dotenv=1.2.4   # getToken.py reads upload_workflow/.env
   - tqdm=4.70.1           # parser progress bar
   - python-dateutil=3.0.0 # pandas dependency, pinned for reproducibility
+  - slack-sdk=3.46.0      # slack_post.py posts msg.md to Slack

@@ -44,12 +44,12 @@ folders under `data_ETL/`. PHAC (NWMP) is the first one.
 ```
 run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
 run_source.sh          one source: pending check -> ETL -> date window -> snapshot -> diff -> guard -> upload+validate
-pipeline.conf          DEV_MIN_START_DATE (dev date window), DEFAULT_MAX_NEW
+pipeline.conf          DEV_MIN_START_DATE (dev date window), DEFAULT_MAX_NEW, SLACK_CHANNEL
 data_ETL/<SOURCE>/     source.conf + etl.sh (+ scripts/, raw/, curated/)
 data_ETL/_template/    copy-me skeleton for a new source
 upload_workflow/       portal API scripts (step1-6, main.py) + pipeline helpers
 runs/<stamp>/          per-run logs and working files (gitignored)
-msg.md                 latest notification digest, a placeholder for Slack (gitignored)
+msg.md                 latest notification digest, posted to Slack if SLACK_CHANNEL is set (gitignored)
 data_specification/    iMicroSeq fields.tsv / enums.tsv
 old/                   original workflow (read-only, gitignored)
 ```

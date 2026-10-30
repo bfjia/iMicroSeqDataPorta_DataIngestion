@@ -80,6 +80,7 @@ fi
 # --- Configuration -------------------------------------------------------
 DEV_MIN_START_DATE=""
 DEFAULT_MAX_NEW=2000
+SLACK_CHANNEL=""
 # shellcheck source=pipeline.conf
 source "${REPO_DIR}/pipeline.conf"
 
@@ -164,6 +165,12 @@ onExit() {
         python "${UPLOAD_DIR}/notify.py" --run-dir "${INGEST_RUN_DIR}" \
             --out "${INGEST_RUN_DIR}/msg.md" --copy-to "${REPO_DIR}/msg.md" > /dev/null \
             && echo "== Notification written to msg.md"
+        # Slack: once per run, never for a dry run (run_weekly.sh does the same)
+        if [[ -n "${SLACK_CHANNEL}" && "${DRY_RUN}" -eq 0 ]]; then
+            python "${UPLOAD_DIR}/slack_post.py" --file "${INGEST_RUN_DIR}/msg.md" \
+                --channel "${SLACK_CHANNEL}" \
+                || echo "WARNING: msg.md was written but could not be posted to Slack (error above)"
+        fi
     fi
     exit "${code}"
 }

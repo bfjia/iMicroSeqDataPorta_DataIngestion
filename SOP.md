@@ -16,7 +16,7 @@ written. If something goes wrong, the tool says so in plain words in a file call
 
 | Word | Meaning |
 |---|---|
-| **Submission** | One batch of records uploaded to the portal. It has a number, e.g. *submission 412*. |
+| **Submission** | One batch of records uploaded to the portal. Each has a number. `msg.md` gives you the number and a link to it (or see Procedure K). |
 | **Validate** | The portal checks the records for errors. The result is **VALID** (all good) or **INVALID** (some records have problems). |
 | **Commit** | Publishing a VALID submission. **You do this on the website.** The tool never commits. |
 | **msg.md** | The tool's message to you after every run: what happened and what to do next |
@@ -45,21 +45,24 @@ written. If something goes wrong, the tool says so in plain words in a file call
    conda env create -f environment.yaml
    ```
 
-3. **Check the portal login file exists.** It's called `.env` and lives in the
-   `upload_workflow` folder. If it's missing, make it from the example and put in the portal
-   username and password:
+3. **Check the login file exists.** It's called `.env` and lives in the `upload_workflow`
+   folder. If it's missing, make it from the example and put in the portal username and password,
+   and the Slack token:
 
    ```bash
    cp upload_workflow/.env.example upload_workflow/.env
    nano upload_workflow/.env
    ```
 
-   It has two lines:
+   It has these lines (lines starting with `#` are notes):
 
    ```
    portalUser=the.portal.account@example.com
    portalPass=the-password
+   duoliauthtoken=xoxb-the-slack-bot-token
    ```
+
+   The data team gives you the Slack token. It's only needed if messages go to Slack.
 
    Save with **Ctrl+O**, **Enter**, then exit with **Ctrl+X**. **Never share this file or put it
    in email, chat or git.**
@@ -73,11 +76,17 @@ Once a week the tool runs by itself (once it's scheduled, Procedure J), or you r
 
 ### Step 1. Open the message
 
-Open `msg.md` in the tool's folder: in VS Code, or in the terminal with:
+If Slack is set up, the message arrives in the team's Slack channel after every run (but not
+after a dry run). It's also always saved as `msg.md` in the tool's folder. Open it in VS Code, or
+in the terminal with:
 
 ```bash
 cat /mnt/d/OneDrive/ProjectIngestion/msg.md
 ```
+
+If no Slack message arrived after a scheduled run, check `msg.md`. A line starting with
+`WARNING: msg.md was written but could not be posted to Slack` in `runs/cron.log` or the run's
+`weekly.log` means the post failed. Tell the data team.
 
 ### Step 2. Look at the first line
 
@@ -92,13 +101,13 @@ cat /mnt/d/OneDrive/ProjectIngestion/msg.md
 The 🟡 section looks like this:
 
 ```
-## 🟡 PHAC-NWMP: review and commit submission 412
+## 🟡 PHAC-NWMP: review and commit submission <number>
 **155 new records** (collection weeks 2026-10-18 to 2026-10-18) passed validation ...
-- Review and commit: https://dev.virusseq-dataportal.ca/submission/environmental/412
+- Review and commit: https://dev.virusseq-dataportal.ca/submission/environmental/<number>
 ```
 
 1. **Open the link** (Ctrl+click it in VS Code, or copy it into your browser). Log in to the portal
-   if asked.
+   if asked. No link? See Procedure K.
 2. **Check before committing:**
    - the submission number on the page matches the one in `msg.md`;
    - the status is **VALID** with **no errors**;
@@ -159,7 +168,7 @@ Then do the weekly routine (Steps 1–4) to review and commit it.
 ### Procedure D: "still waiting for your commit" (🟡)
 
 ```
-## 🟡 PHAC-NWMP: submission 412 is still waiting for your commit
+## 🟡 PHAC-NWMP: submission <number> is still waiting for your commit
 Open since 2026-10-30 (7 days). Nothing new was uploaded this run.
 ```
 
@@ -169,11 +178,12 @@ everything new.
 ### Procedure E: "failed validation" (🔴)
 
 ```
-## 🔴 PHAC-NWMP: submission 413 failed validation (8 errors)
-- See what failed: https://dev.virusseq-dataportal.ca/submission/environmental/413
+## 🔴 PHAC-NWMP: submission <number> failed validation (8 errors)
+- See what failed: https://dev.virusseq-dataportal.ca/submission/environmental/<number>
 ```
 
-1. Open the link and look at the **Status** column. It shows which records failed and why.
+1. Open the link and look at the **Status** column. It shows which records failed and why. To see
+   the errors in the terminal instead, see Procedure K.
 2. **Don't try to fix the data by hand on the website.** Send the data team:
    - the link;
    - the `Log:` path from `msg.md`;
@@ -274,6 +284,55 @@ tail -n 20 /mnt/d/OneDrive/ProjectIngestion/runs/cron.log
 
 **To stop the schedule:** run `crontab -e` again, put a `#` at the start of the `run_weekly.sh`
 line (or delete both lines), and save.
+
+### Procedure K: find a submission (for troubleshooting)
+
+Normally you don't need this, because `msg.md` always has the link. Use it if you've lost the
+message, or the data team asks about a submission.
+
+**The submission that is still open** (waiting for your commit, or INVALID and waiting for a fix):
+
+```bash
+cd /mnt/d/OneDrive/ProjectIngestion
+conda activate ProjectIngestion
+python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST
+```
+
+| Line | Means |
+|---|---|
+| `PENDING=0` | Nothing is open. Every submission has been committed or discarded. |
+| `PENDING=1` | One is open. The lines below describe it. |
+| `PENDING_ID=` | its number |
+| `PENDING_STATUS=` | `VALID` (waiting for your commit) or `INVALID` (needs fixing) |
+| `PENDING_CREATED=` | when it was uploaded (UTC time) |
+| `PENDING_URL=` | its link: open it in your browser |
+
+`PHAC-AUTOINGEST` is PHAC's organization. For another source, use the `ORGANIZATION=` value in
+its `data_ETL/<SOURCE>/source.conf`.
+
+**Every submission the tool has uploaded, committed ones included.** Each upload writes its link
+into that run's folder. List them all:
+
+```bash
+grep SUBMISSION_URL runs/*/*/status.env
+```
+
+Each line looks like `runs/<date>-<time>/<SOURCE>/status.env:SUBMISSION_URL=https://…`. The
+folder name is when the run started, so the last line is the newest upload. That run's message is
+in `runs/<date>-<time>/msg.md`.
+
+**Open a submission by its number:** go to
+`https://dev.virusseq-dataportal.ca/submission/environmental/<number>`, replacing `<number>`, and
+log in if asked.
+
+**Check a submission's status and errors in the terminal:**
+
+```bash
+python upload_workflow/step6_validate.py --submission-id <number> --details
+```
+
+It prints the submission's `status` and its record counts. For an INVALID submission, it ends
+with the errors for each record. Send all of it to the data team.
 
 ---
 
