@@ -18,8 +18,10 @@ folders under `data_ETL/`. PHAC (NWMP) is the first one.
    - Commits are done by a person on the portal website, in dev and prod.
    - The pipeline only uploads and validates. `upload_workflow/main.py` has no commit path, and
      `step7_commit.py` was deliberately not carried over; don't add either back.
-   - **Ask before every upload to dev** while developing or testing. `--dry-run` is the safe way
-     to exercise the pipeline.
+   - **Ask before every upload to dev, and before closing (discarding) any submission there**,
+     while developing or testing. `--dry-run` is the safe way to exercise the pipeline.
+   - Closing an open submission is the operator's call (`close_submission.sh`). It never touches
+     published records.
    - "Commit" here means publishing on the portal. Git commits and pushes are separate and fine.
 2. **Dev only** until the owner says prod. The only portal is `dev.virusseq-dataportal.ca` (its
    `ego.dev.` and `submission-service.dev.` hosts). Don't contact any other portal host.
@@ -44,6 +46,7 @@ folders under `data_ETL/`. PHAC (NWMP) is the first one.
 ```
 run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
 run_source.sh          one source: pending check -> ETL -> date window -> snapshot -> diff -> guard -> upload+validate
+close_submission.sh    discard a source's open submission (asks for its number) so a new one can start
 pipeline.conf          DEV_MIN_START_DATE (dev date window), DEFAULT_MAX_NEW, SLACK_CHANNEL
 data_ETL/<SOURCE>/     source.conf + etl.sh (+ scripts/, raw/, curated/)
 data_ETL/_template/    copy-me skeleton for a new source

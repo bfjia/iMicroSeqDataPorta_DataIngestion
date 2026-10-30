@@ -172,7 +172,8 @@ https://dev.virusseq-dataportal.ca/submission/environmental/<number>
 ```
 
 Last week's submission was never committed. Do Steps 3–4 for that link. The next run picks up
-everything new.
+everything new. If it should **not** be committed (for example, the data has to be redone), close
+it instead (Procedure L).
 
 ### Procedure E: "failed validation" (🔴)
 
@@ -188,9 +189,9 @@ Log: `runs/<date>-<time>/PHAC-NWMP/run.log`
    - the link;
    - the `Log:` path from `msg.md`;
    - a screenshot of the errors.
-3. While it stays INVALID, the weekly run won't upload anything new for that source, and
-   `msg.md` keeps reminding you. Once the data team fixes and re-uploads it, do Steps 3–4 as
-   normal.
+3. While it stays open, the weekly run won't upload anything new for that source, and
+   `msg.md` keeps reminding you. Once the data team has fixed the cause, close it
+   (Procedure L) and run again (Procedure A). Then do Steps 3–4 for the new submission.
 
 ### Procedure F: "missing values" (FYI line)
 
@@ -333,6 +334,38 @@ python upload_workflow/step6_validate.py --submission-id <number> --details
 
 It prints the submission's `status` and its record counts. For an INVALID submission, it ends
 with the errors for each record. Send all of it to the data team.
+
+### Procedure L: close the open submission and start over
+
+Use this when the open submission should **not** be committed: it failed validation and the
+cause has been fixed, or the data has to be redone. Closing throws the submission away, so the
+next run can upload a new one. Records that are already published are not affected, and nothing
+is committed.
+
+```bash
+cd /mnt/d/OneDrive/ProjectIngestion
+./close_submission.sh PHAC
+```
+
+`PHAC` is the source's folder name under `data_ETL/`. The script shows the open submission and
+asks you to confirm:
+
+```
+Open submission for PHAC-AUTOINGEST:
+  number:  <number>
+  status:  INVALID
+  created: 2026-10-30T18:24:19.424Z
+  link:    https://dev.virusseq-dataportal.ca/submission/environmental/<number>
+Closing discards it and everything staged in it. Published records are not affected.
+Type <number> to close it, or press Enter to cancel:
+```
+
+Type the number and press **Enter** to close it, or just press **Enter** to cancel. Then start a
+new one by running the tool again (Procedure A). It uploads everything that isn't published yet.
+
+- `No open submission … Nothing to close` means there's nothing to do.
+- A committed submission can't be closed: its records are published.
+- `a pipeline run is in progress` means a run is going right now. Wait for it to finish.
 
 ---
 

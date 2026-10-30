@@ -35,6 +35,7 @@ cat msg.md                       # the run's notification: what happened, what t
 ProjectIngestion/
 ├── run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
 ├── run_source.sh          one source end to end (steps 1-8 below)
+├── close_submission.sh    discard a source's open (uncommitted) submission to start over
 ├── pipeline.conf          pipeline-wide settings (dev date window, size limit, Slack channel)
 ├── msg.md                 latest notification digest (every run; posted to Slack; gitignored)
 ├── SOP.md                 plain-language procedure
@@ -234,6 +235,7 @@ log.
 ```
 ./run_source.sh <SOURCE> [--dry-run] [--force] [--holdout-weeks N] [--holdout-random N] [--keep-work]
 ./run_weekly.sh [--dry-run]
+./close_submission.sh <SOURCE> [--yes]
 ```
 
 | Option | Effect |
@@ -246,6 +248,18 @@ log.
 `run_weekly.sh` runs every folder in `data_ETL/` that has a `source.conf` with `ENABLED=1`.
 Folders starting with `_` are skipped. A failing source doesn't stop the others. Its exit code is 1
 if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
+
+`close_submission.sh` discards the source's open submission (`DELETE /submission/{id}`) so the
+next run can upload a new one. Use it after an INVALID upload whose cause is fixed, or when the
+data has to be redone.
+
+- **What it touches:** only the open, uncommitted submission. Published records are untouched,
+  and it never commits.
+- **Confirmation:** it shows the submission and asks you to type its number. `--yes` skips that.
+  Without a terminal and without `--yes`, it refuses.
+- **Lock:** it takes `runs/.lock`, so it can't run during a pipeline run.
+- **Where the logic lives:** `upload_workflow/close_submission.py`, which reuses
+  `step5_upload.closeSubmission`.
 
 ## Configuration
 
