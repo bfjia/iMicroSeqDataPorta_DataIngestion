@@ -189,7 +189,7 @@ it to Slack (see below).
 |---|---|---|
 | `review` | 🟡 | Uploaded and VALID: review and commit it on the website |
 | `waiting` | 🟡 | A VALID submission from an earlier run is still waiting to be committed. Nothing new was uploaded. |
-| `waiting_invalid` | 🔴 | An INVALID submission is still open. Fix it or discard it on the website. |
+| `waiting_invalid` | 🔴 | An INVALID submission is still open. Fix the cause, then close it with `close_submission.sh` (the website can't close submissions). |
 | `invalid` | 🔴 | This run's upload failed validation |
 | `guard` | 🔴 | More new records than `MAX_NEW`; nothing uploaded |
 | `failed` | 🔴 | A step errored. The message says which, with the last log lines. |
@@ -251,7 +251,8 @@ if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
 
 `close_submission.sh` discards the source's open submission (`DELETE /submission/{id}`) so the
 next run can upload a new one. Use it after an INVALID upload whose cause is fixed, or when the
-data has to be redone.
+data has to be redone. The portal website has no way to close a submission yet, so this is the
+only way short of `main.py --replace`.
 
 - **What it touches:** only the open, uncommitted submission. Published records are untouched,
   and it never commits.

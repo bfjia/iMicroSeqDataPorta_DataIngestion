@@ -125,11 +125,12 @@ def section(s, folder):
                 f"({waitedFor(s.get('PENDING_CREATED', ''))}). Nothing new uploaded.", url]
     elif status == "waiting_invalid":
         out += [f"{head} submission {sid} failed validation "
-                f"({waitedFor(s.get('PENDING_CREATED', ''))}). Fix and re-upload, or discard it.",
-                url]
+                f"({waitedFor(s.get('PENDING_CREATED', ''))}). Fix the cause, then "
+                f"`./close_submission.sh {s.get('SOURCE_NAME', '<SOURCE>')}` and run again.", url]
     elif status == "invalid":
         out += [f"{head} submission {sid} failed validation ({num(s.get('ERRORS'))} errors). "
-                "Nothing published.", url]
+                f"Fix the cause, then `./close_submission.sh {s.get('SOURCE_NAME', '<SOURCE>')}` "
+                "and run again.", url]
     elif status == "guard":
         out += [f"{head} stopped: {new} new records is over the limit of "
                 f"{num(s.get('MAX_NEW'))}. Nothing uploaded. Likely a sample-ID change; "

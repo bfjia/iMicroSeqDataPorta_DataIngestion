@@ -19,6 +19,7 @@ written. If something goes wrong, the tool says so in plain words in a file call
 | **Submission** | One batch of records uploaded to the portal. Each has a number. `msg.md` gives you the number and a link to it (or see Procedure K). |
 | **Validate** | The portal checks the records for errors. The result is **VALID** (all good) or **INVALID** (some records have problems). |
 | **Commit** | Publishing a VALID submission. **You do this on the website.** The tool never commits. |
+| **Close** | Throwing away a submission that hasn't been committed, so a new one can be uploaded. **The website can't do this yet:** use the `close_submission.sh` script (Procedure L). |
 | **msg.md** | The tool's message to you after every run: what happened and what to do next |
 | **Terminal** | The black window where you type commands (Ubuntu / WSL) |
 
@@ -112,7 +113,8 @@ https://dev.virusseq-dataportal.ca/submission/environmental/<number>
    - the status is **VALID** with **no errors**;
    - the number of records matches `msg.md` (e.g. 155);
    - spot-check a few records: dates are recent, places look right, and the values aren't blank.
-3. If anything looks wrong, **don't commit.** See "When to ask for help" at the end.
+3. If anything looks wrong, **don't commit.** See "When to ask for help" at the end. If it has to
+   be redone, close it with the script (Procedure L), not on the website.
 
 ### Step 4. Commit on the website
 
@@ -178,7 +180,7 @@ it instead (Procedure L).
 ### Procedure E: "failed validation" (🔴)
 
 ```
-🔴 PHAC-NWMP: submission <number> failed validation (8 errors). Nothing published.
+🔴 PHAC-NWMP: submission <number> failed validation (8 errors). Fix the cause, then `./close_submission.sh PHAC` and run again.
 https://dev.virusseq-dataportal.ca/submission/environmental/<number>
 Log: `runs/<date>-<time>/PHAC-NWMP/run.log`
 ```
@@ -337,18 +339,41 @@ with the errors for each record. Send all of it to the data team.
 
 ### Procedure L: close the open submission and start over
 
-Use this when the open submission should **not** be committed: it failed validation and the
-cause has been fixed, or the data has to be redone. Closing throws the submission away, so the
-next run can upload a new one. Records that are already published are not affected, and nothing
-is committed.
+> **The portal website has no way to close a submission yet.** Use this script. Don't look for
+> a button on the website.
 
-```bash
-cd /mnt/d/OneDrive/ProjectIngestion
-./close_submission.sh PHAC
-```
+**When to use it:** the open submission should **not** be committed. Either it failed validation
+(🔴) and the data team has fixed the cause, or the data has to be redone. While a submission is
+open, the tool uploads nothing new for that source, so closing it is how you start over.
 
-`PHAC` is the source's folder name under `data_ETL/`. The script shows the open submission and
-asks you to confirm:
+**What closing does:**
+
+- It throws away the open submission and the records in it. This can't be undone.
+- No data is lost: those records aren't published, so the next run finds them as new again and
+  uploads them.
+- Records that are already published are never affected. A committed submission can't be closed.
+- Nothing is committed.
+
+**Steps:**
+
+1. **Check which submission is open** and that it's the one you mean (Procedure K):
+
+   ```bash
+   cd /mnt/d/OneDrive/ProjectIngestion
+   conda activate ProjectIngestion
+   python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST
+   ```
+
+   Note the `PENDING_ID` number.
+
+2. **Run the close script** for the source. `PHAC` is the source's folder name under
+   `data_ETL/`:
+
+   ```bash
+   ./close_submission.sh PHAC
+   ```
+
+3. **Confirm.** The script shows the open submission and asks for its number:
 
 ```
 Open submission for PHAC-AUTOINGEST:
@@ -360,12 +385,27 @@ Closing discards it and everything staged in it. Published records are not affec
 Type <number> to close it, or press Enter to cancel:
 ```
 
-Type the number and press **Enter** to close it, or just press **Enter** to cancel. Then start a
-new one by running the tool again (Procedure A). It uploads everything that isn't published yet.
+   Check the number matches the one from step 1. Then type it and press **Enter** to close it,
+   or just press **Enter** to cancel (nothing changes).
 
-- `No open submission … Nothing to close` means there's nothing to do.
-- A committed submission can't be closed: its records are published.
-- `a pipeline run is in progress` means a run is going right now. Wait for it to finish.
+4. **Check it worked.** It should end with:
+
+   ```
+   Closed submission <number>. The next run uploads a new one.
+   ```
+
+5. **Start a new submission** by running the tool again (Procedure A). It uploads everything
+   that isn't published yet. Then follow the weekly routine (Steps 1–4) for the new submission.
+   If the old one failed validation, only do this once the data team says the cause is fixed;
+   otherwise the new one fails the same way.
+
+| The script says | Means | Do this |
+|---|---|---|
+| `No open submission … Nothing to close` | Nothing is open | Nothing. You can run the tool (Procedure A). |
+| `Cancelled. Nothing was changed.` | You pressed Enter, or typed a different number | Run it again if you meant to close it |
+| `a pipeline run is in progress` | A run is going right now | Wait a few minutes and try again |
+| `ERROR: … still shows as open after closing it` | The portal didn't close it | Send the output to the data team |
+| `ERROR: … HTTP 401` / `403` | Login or permission problem | Check `upload_workflow/.env`; tell the data team if it repeats |
 
 ---
 
@@ -388,6 +428,7 @@ Contact the data team if:
 - the same 🔴 message appears two runs in a row;
 - anything on the website looks wrong before you commit, such as odd dates, blank values or wrong
   places;
+- you're not sure whether to commit a submission or close it;
 - you see a long block of text mentioning `Traceback`. Copy all of it and send it along.
 
 **Never** edit the files ending in `.py` or `.sh`, and never commit on the website if you're

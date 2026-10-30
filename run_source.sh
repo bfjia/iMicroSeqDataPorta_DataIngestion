@@ -177,6 +177,7 @@ onExit() {
 trap onExit EXIT
 
 setStatus SOURCE_ID "${SOURCE_ID}"
+setStatus SOURCE_NAME "${SOURCE_NAME}"
 setStatus ORGANIZATION "${ORGANIZATION}"
 setStatus LOG "${LOG}"
 setStatus CUTOFF "${CUTOFF}"

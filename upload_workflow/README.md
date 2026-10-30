@@ -21,7 +21,9 @@ The submission service is [Overture Lyric](https://github.com/overture-stack/lyr
 2. **Validate:** the submission settles on `VALID` or `INVALID`. Nothing is public yet.
 3. **Commit:** the records are published. **This happens on the website, by a person.**
 
-An open submission (VALID or INVALID) is harmless. It waits until someone commits or discards it.
+An open submission (VALID or INVALID) is harmless. It waits until someone commits it on the
+website, or closes it with `close_submission.py` / `../close_submission.sh`. The website has no
+way to close one yet.
 
 ## The scripts
 

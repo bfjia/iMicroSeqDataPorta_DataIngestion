@@ -151,8 +151,8 @@ def main(argv=None):
             print(
                 f"ERROR: submission {active['id']} is already open for {args.organization!r} "
                 f"(status {active['status']}). Uploading would append to it and duplicate every "
-                "record.\n       Commit or discard it on the website first, or re-run with "
-                "--replace to discard it.\n"
+                "record.\n       Commit it on the website, or close it first "
+                "(../close_submission.sh <SOURCE>), or re-run with --replace to discard it.\n"
                 f"       {args.portal_url.format(submissionId=active['id'])}",
                 file=sys.stderr,
             )
