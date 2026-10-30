@@ -94,16 +94,15 @@ If no Slack message arrived after a scheduled run, check `msg.md`. A line starti
 |---|---|---|
 | 🟢 **all good** | Nothing needs you | Nothing. You're done for the week. |
 | 🟡 **action needed** | A submission is waiting for your review | Go to Step 3 |
-| 🔴 **a problem needs attention** | Something stopped the upload | Find the 🔴 section and follow the matching procedure below |
+| 🔴 **problem** | Something stopped the upload | Find the 🔴 line and follow the matching procedure below |
 
 ### Step 3. Review the submission on the website
 
-The 🟡 section looks like this:
+The 🟡 line looks like this:
 
 ```
-## 🟡 PHAC-NWMP: review and commit submission <number>
-**155 new records** (collection weeks 2026-10-18 to 2026-10-18) passed validation ...
-- Review and commit: https://dev.virusseq-dataportal.ca/submission/environmental/<number>
+🟡 PHAC-NWMP: 155 new records (week 2026-10-18) passed validation. Review and commit:
+https://dev.virusseq-dataportal.ca/submission/environmental/<number>
 ```
 
 1. **Open the link** (Ctrl+click it in VS Code, or copy it into your browser). Log in to the portal
@@ -168,8 +167,8 @@ Then do the weekly routine (Steps 1–4) to review and commit it.
 ### Procedure D: "still waiting for your commit" (🟡)
 
 ```
-## 🟡 PHAC-NWMP: submission <number> is still waiting for your commit
-Open since 2026-10-30 (7 days). Nothing new was uploaded this run.
+🟡 PHAC-NWMP: submission <number> is still waiting for your commit (open 7 days). Nothing new uploaded.
+https://dev.virusseq-dataportal.ca/submission/environmental/<number>
 ```
 
 Last week's submission was never committed. Do Steps 3–4 for that link. The next run picks up
@@ -178,8 +177,9 @@ everything new.
 ### Procedure E: "failed validation" (🔴)
 
 ```
-## 🔴 PHAC-NWMP: submission <number> failed validation (8 errors)
-- See what failed: https://dev.virusseq-dataportal.ca/submission/environmental/<number>
+🔴 PHAC-NWMP: submission <number> failed validation (8 errors). Nothing published.
+https://dev.virusseq-dataportal.ca/submission/environmental/<number>
+Log: `runs/<date>-<time>/PHAC-NWMP/run.log`
 ```
 
 1. Open the link and look at the **Status** column. It shows which records failed and why. To see
@@ -195,7 +195,7 @@ everything new.
 ### Procedure F: "missing values" (FYI line)
 
 ```
-- FYI: The parser could not resolve some values and left them blank. Please supply them ...: coordinates: ['Somewhere, Yukon']
+- FYI: missing values, please supply: coordinates: ['Somewhere, Yukon']
 ```
 
 The source data had something new the tool doesn't know yet, often a new city whose map position
@@ -205,23 +205,23 @@ to the data team, who will add the missing value. Nothing else is needed from yo
 ### Procedure G: "revised values" (FYI line)
 
 ```
-- FYI: 3 already-published records have revised values at the source; they were not re-uploaded ...
+- FYI: 3 published records were revised at the source, not re-uploaded (`runs/…/changed.csv`)
 ```
 
 The source changed numbers for records that are already published. The tool never overwrites
 published records. Pass the line on to the data team if the corrections matter. Otherwise no
 action is needed.
 
-### Procedure H: "stopped, N new records is over the limit" (🔴)
+### Procedure H: "stopped: N new records is over the limit" (🔴)
 
 The tool found far more new records than a normal week. This is a safety stop: it usually means
 the source changed its format, and uploading would create duplicates. **Don't use `--force`
-yourself.** Send the `msg.md` section to the data team.
+yourself.** Send the 🔴 line from `msg.md` to the data team.
 
 ### Procedure I: "run failed during …" (🔴)
 
 Something broke: the internet, the portal being down, the login, or a change at the source. Try
-once more later with Procedure A. If it fails again, send the data team the whole 🔴 section of
+once more later with Procedure A. If it fails again, send the data team the 🔴 lines of
 `msg.md` and the `Log:` file it names.
 
 ### Procedure J: run it automatically every week (crontab)

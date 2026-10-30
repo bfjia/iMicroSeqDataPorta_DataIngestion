@@ -168,11 +168,19 @@ run's `status.env` files into **one** Markdown digest. It is written to `msg.md`
 (overwritten each run) and to `runs/<stamp>/msg.md`. Then `upload_workflow/slack_post.py` posts
 it to Slack (see below).
 
-- **Headline:** the worst status across sources: 🔴 problem > 🟡 action needed > 🟢 all good.
-- **One section per source**, showing its most important status only, with counts, collection
-  weeks, the website link and the log path.
+- **Short on purpose.** A typical message is three lines:
+  ```
+  # 🟡 iMicroSeq (dev): action needed · 2026-11-02 09:00
+  **🟡 PHAC-NWMP:** 212 new records (week 2026-10-25) passed validation. Review and commit:
+  https://dev.virusseq-dataportal.ca/submission/environmental/<number>
+  ```
+- **Headline:** the worst status across sources (🔴 problem > 🟡 action needed > 🟢 all good),
+  and the run time.
+- **One bold line per source** with its own dot, showing its most important status only, and the
+  submission link when there is one. The log path is added only for 🔴 problems; a failed step
+  also gets the last 6 log lines.
 - **FYI lines** never change the headline on their own: unresolved parser values, revised
-  (changed) records, test hold-backs, the dev window.
+  (changed) records, test hold-backs.
 - **No spam:** one message per run, no per-step messages. Reminders repeat only as often as the
   run (weekly). A quiet week still writes a short 🟢 message, so you can tell the run happened.
 

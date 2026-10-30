@@ -4,14 +4,16 @@ One message per run, never one per step. run_source.sh leaves a status.env in
 each source's run folder; this reads them all and writes a single Markdown
 digest:
 
-  * a headline with the worst status across sources:
+  * a headline with the worst status across sources and the run time:
         🔴 problem  >  🟡 action needed  >  🟢 all good
-  * one section per source, showing only that source's most important status;
-  * FYI lines inside a section (unresolved parser values, revised records,
-    test hold-backs) that never change the headline on their own.
+  * one short section per source: a bold one-liner with its own dot, then the
+    submission link if there is one;
+  * FYI lines inside a section (missing parser values, revised records,
+    test hold-backs) that never change the headline on their own;
+  * the log path only for problems.
 
-A quiet week still produces one short message, so silence never has to be read
-as "did it run?". The file is plain Markdown; slack_post.py converts it for
+Kept short on purpose. A quiet week still produces one line per source, so
+silence never has to be read as "did it run?". The file is plain Markdown; slack_post.py converts it for
 Slack.
 
     python notify.py --run-dir runs/20261030-081500 --out runs/20261030-081500/msg.md --copy-to msg.md
@@ -78,16 +80,26 @@ def dateRange(csvPath):
 
 
 def waitedFor(createdAt):
-    """'2026-10-30T15:12:00.000Z' -> ('2026-10-30', 5) or (raw, None)."""
+    """'2026-10-30T15:12:00.000Z' -> 'open since today' / 'open 5 days'."""
     try:
         created = datetime.datetime.fromisoformat(createdAt.replace("Z", "+00:00"))
     except (AttributeError, ValueError):
-        return createdAt or "an unknown date", None
+        return f"open since {createdAt or 'an unknown date'}"
     days = (datetime.datetime.now(datetime.timezone.utc) - created).days
-    return created.date().isoformat(), days
+    if days < 1:
+        return "open since today"
+    return f"open {days} day{'s' if days != 1 else ''}"
 
 
-def logTail(path, lines=12):
+def weeks(csvPath):
+    """' (week 2026-10-18)' / ' (weeks 2026-09-06 to 2026-10-11)' / ''."""
+    rng = dateRange(csvPath)
+    if not rng:
+        return ""
+    return f" (week {rng[0]})" if rng[0] == rng[1] else f" (weeks {rng[0]} to {rng[1]})"
+
+
+def logTail(path, lines=6):
     if not path or not os.path.exists(path):
         return ""
     with open(path, encoding="utf-8", errors="replace") as handle:
@@ -96,105 +108,62 @@ def logTail(path, lines=12):
 
 
 def section(s, folder):
-    """Render one source's section. Returns (level, markdown)."""
+    """Render one source's section: a bold one-liner, then a link/FYIs. Returns (level, md)."""
     status = s.get("STATUS", "failed")
     level = Levels.get(status, "problem")
-    source = s.get("SOURCE_ID", os.path.basename(folder))
+    head = f"**{Icons[level]} {s.get('SOURCE_ID', os.path.basename(folder))}:**"
     sid = s.get("SUBMISSION_ID", "")
     url = s.get("SUBMISSION_URL", "")
     new = num(s.get("NEW"))
+    delta = os.path.join(folder, "delta.csv")
     out = []
 
     if status == "review":
-        rng = dateRange(os.path.join(folder, "delta.csv"))
-        weeks = f" (collection weeks {rng[0]} to {rng[1]})" if rng else ""
-        out += [
-            f"## {Icons[level]} {source}: review and commit submission {sid}",
-            f"**{new} new records**{weeks} passed validation and are waiting for you. "
-            "Nothing is published until you commit it on the website.",
-            f"- Review and commit: {url}",
-        ]
-    elif status in ("waiting", "waiting_invalid"):
-        since, days = waitedFor(s.get("PENDING_CREATED", ""))
-        age = f" ({days} day{'s' if days != 1 else ''})" if days is not None else ""
-        if status == "waiting":
-            out += [
-                f"## {Icons[level]} {source}: submission {sid} is still waiting for your commit",
-                f"Open since {since}{age}. Nothing new was uploaded this run. New records go up "
-                "on the first run after you commit it.",
-                f"- Review and commit: {url}",
-            ]
-        else:
-            out += [
-                f"## {Icons[level]} {source}: submission {sid} failed validation and is still open",
-                f"Open since {since}{age}. Nothing new is uploaded until it is resolved: fix the "
-                "data and re-upload with `--replace`, or discard it on the website.",
-                f"- See what failed: {url}",
-                "- How: SOP.md, \"Validation failed\"",
-            ]
+        out += [f"{head} {new} new records{weeks(delta)} passed validation. Review and commit:", url]
+    elif status == "waiting":
+        out += [f"{head} submission {sid} is still waiting for your commit "
+                f"({waitedFor(s.get('PENDING_CREATED', ''))}). Nothing new uploaded.", url]
+    elif status == "waiting_invalid":
+        out += [f"{head} submission {sid} failed validation "
+                f"({waitedFor(s.get('PENDING_CREATED', ''))}). Fix and re-upload, or discard it.",
+                url]
     elif status == "invalid":
-        out += [
-            f"## {Icons[level]} {source}: submission {sid} failed validation "
-            f"({num(s.get('ERRORS'))} errors)",
-            f"{new} records were uploaded but did not validate. Nothing was published.",
-            f"- See what failed: {url}",
-            "- How: SOP.md, \"Validation failed\"",
-        ]
+        out += [f"{head} submission {sid} failed validation ({num(s.get('ERRORS'))} errors). "
+                "Nothing published.", url]
     elif status == "guard":
-        out += [
-            f"## {Icons[level]} {source}: stopped, {new} new records is over the limit of "
-            f"{num(s.get('MAX_NEW'))}",
-            "A normal week brings a few hundred. A jump like this usually means the source "
-            "changed how sample IDs are built, which would re-upload old data under new IDs. "
-            "Nothing was uploaded. If the number is expected, re-run with `--force`.",
-        ]
+        out += [f"{head} stopped: {new} new records is over the limit of "
+                f"{num(s.get('MAX_NEW'))}. Nothing uploaded. Likely a sample-ID change; "
+                "if expected, re-run with `--force`."]
     elif status == "nothing_new":
-        out += [
-            f"## {Icons[level]} {source}: nothing new",
-            f"{num(s.get('IN_SCOPE'))} records checked, all already published.",
-        ]
+        out += [f"{head} nothing new ({num(s.get('IN_SCOPE'))} records checked)."]
     elif status == "dry_run":
-        rng = dateRange(os.path.join(folder, "delta.csv"))
-        weeks = f" (collection weeks {rng[0]} to {rng[1]})" if rng else ""
-        out += [
-            f"## {Icons[level]} {source}: dry run, nothing uploaded",
-            f"**{new} new records**{weeks} would be uploaded "
-            f"(list: `{rel(os.path.join(folder, 'delta.csv'))}`).",
-        ]
+        out += [f"{head} dry run: {new} new records{weeks(delta)} would be uploaded "
+                f"(`{rel(delta)}`)."]
     else:  # failed
-        step = s.get("STEP", "an unknown step")
         reason = s.get("REASON", "")
-        out += [f"## {Icons[level]} {source}: run failed during {step}"]
-        if reason:
-            out.append(reason)
+        out += [f"{head} run failed during {s.get('STEP', 'an unknown step')}."
+                + (f" {reason}" if reason else "")]
         tail = logTail(s.get("LOG"))
         if tail:
-            out += ["Last lines of the log:", "```", tail, "```"]
+            out += ["```", tail, "```"]
 
     # FYI lines: worth knowing, but never a reason to change the headline.
-    fyi = []
     changed = s.get("CHANGED", "0")
     if changed not in ("", "0"):
-        fyi.append(f"{num(changed)} already-published records have revised values at the source; "
-                   f"they were not re-uploaded (list: `{rel(os.path.join(folder, 'changed.csv'))}`).")
+        out.append(f"- FYI: {num(changed)} published records were revised at the source, not "
+                   f"re-uploaded (`{rel(os.path.join(folder, 'changed.csv'))}`)")
     missingPath = os.path.join(folder, "missing.txt")
     if os.path.exists(missingPath):
         with open(missingPath, encoding="utf-8") as handle:
             missing = [l.strip() for l in handle if l.strip()]
         if missing:
-            fyi.append("The parser could not resolve some values and left them blank. "
-                       "Please supply them (SOP.md, \"Missing values\"): " + "; ".join(missing))
+            out.append("- FYI: missing values, please supply: " + "; ".join(missing))
     held = s.get("HELD_OUT", "0")
     if held not in ("", "0"):
-        fyi.append(f"Test mode: {num(held)} records were held back on purpose "
-                   f"(`{rel(os.path.join(folder, 'heldout.csv'))}`).")
-    cutoff = s.get("CUTOFF", "")
-    if cutoff and status in ("review", "dry_run"):
-        fyi.append(f"Dev window: only collection weeks from {cutoff} on are uploaded.")
-    out += [f"- FYI: {line}" for line in fyi]
+        out.append(f"- FYI: test mode, {num(held)} records held back")
 
-    if s.get("LOG"):
-        out.append(f"- Log: `{rel(s['LOG'])}`")
+    if level == "problem" and s.get("LOG"):
+        out.append(f"Log: `{rel(s['LOG'])}`")
     return level, "\n".join(out)
 
 
@@ -207,20 +176,14 @@ def build(runDir):
     stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
     if not folders:
-        return ("# 🔴 iMicroSeq ingestion (" + env + "): run produced no results\n\n"
-                f"Run {stamp}. No source reported a status; check `{rel(runDir)}`.\n")
+        return (f"# 🔴 iMicroSeq ({env}): problem · {stamp}\n\n"
+                f"No source reported a status; check `{rel(runDir)}`.\n")
 
     sections = [section(readStatus(os.path.join(f, "status.env")), f) for f in folders]
     worst = min((lvl for lvl, _ in sections), key=Rank.get)
-    title = {"problem": "a problem needs attention",
-             "action": "action needed",
-             "ok": "all good"}[worst]
-    counts = {lvl: sum(1 for l, _ in sections if l == lvl) for lvl in Rank}
-    summary = (f"Run {stamp} · {len(sections)} source{'s' if len(sections) != 1 else ''} · "
-               f"{counts['action']} waiting on you · {counts['problem']} problem"
-               f"{'s' if counts['problem'] != 1 else ''}")
+    title = {"problem": "problem", "action": "action needed", "ok": "all good"}[worst]
 
-    parts = [f"# {Icons[worst]} iMicroSeq ingestion ({env}): {title}", summary]
+    parts = [f"# {Icons[worst]} iMicroSeq ({env}): {title} · {stamp}"]
     parts += [md for _, md in sorted(sections, key=lambda x: Rank[x[0]])]
     return "\n\n".join(parts) + "\n"
 
