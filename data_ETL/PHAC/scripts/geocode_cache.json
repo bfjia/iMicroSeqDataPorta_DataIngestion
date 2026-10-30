@@ -1,0 +1,234 @@
+{
+  "Alberton, Prince Edward Island": {
+    "lat": "46.81275 N",
+    "lon": "64.06500 W"
+  },
+  "Assiniboia, Saskatchewan": {
+    "lat": "49.63112 N",
+    "lon": "105.99265 W"
+  },
+  "Cape Breton Regional Municipality, Nova Scotia": {
+    "lat": "46.03505 N",
+    "lon": "60.33405 W"
+  },
+  "Battleford, Saskatchewan": {
+    "lat": "52.73770 N",
+    "lon": "108.30390 W"
+  },
+  "Birch Hills, Saskatchewan": {
+    "lat": "52.98420 N",
+    "lon": "105.43304 W"
+  },
+  "Brandon, Manitoba": {
+    "lat": "49.85111 N",
+    "lon": "99.96089 W"
+  },
+  "Bridgewater, Nova Scotia": {
+    "lat": "44.37741 N",
+    "lon": "64.51939 W"
+  },
+  "Calgary, Alberta": {
+    "lat": "51.04561 N",
+    "lon": "114.05754 W"
+  },
+  "Canora, Saskatchewan": {
+    "lat": "51.63641 N",
+    "lon": "102.43130 W"
+  },
+  "Colchester, Nova Scotia": {
+    "lat": "45.43773 N",
+    "lon": "63.34889 W"
+  },
+  "City of Charlottetown and Town of Stratford, Prince Edward Island": {
+    "lat": "",
+    "lon": ""
+  },
+  "Edmonton, Alberta": {
+    "lat": "53.54621 N",
+    "lon": "113.49124 W"
+  },
+  "Bathurst, New Brunswick": {
+    "lat": "47.62087 N",
+    "lon": "65.65375 W"
+  },
+  "Campbellton, New Brunswick": {
+    "lat": "48.00466 N",
+    "lon": "66.67660 W"
+  },
+  "Edmundston, New Brunswick": {
+    "lat": "47.36372 N",
+    "lon": "68.32888 W"
+  },
+  "Miramichi, New Brunswick": {
+    "lat": "47.02980 N",
+    "lon": "65.47042 W"
+  },
+  "Moncton, New Brunswick": {
+    "lat": "46.09857 N",
+    "lon": "64.80043 W"
+  },
+  "Saint John, New Brunswick": {
+    "lat": "45.27276 N",
+    "lon": "66.06279 W"
+  },
+  "Fredericton, New Brunswick": {
+    "lat": "45.94883 N",
+    "lon": "66.62918 W"
+  },
+  "Estevan, Saskatchewan": {
+    "lat": "49.14281 N",
+    "lon": "102.99107 W"
+  },
+  "St. Stephen, New Brunswick": {
+    "lat": "45.19267 N",
+    "lon": "67.27601 W"
+  },
+  "Sackville, New Brunswick": {
+    "lat": "45.90794 N",
+    "lon": "64.37237 W"
+  },
+  "Haines Junction, Yukon": {
+    "lat": "60.75272 N",
+    "lon": "137.51004 W"
+  },
+  "Halifax, Nova Scotia": {
+    "lat": "44.64862 N",
+    "lon": "63.58595 W"
+  },
+  "Kingston, Ontario": {
+    "lat": "44.30542 N",
+    "lon": "76.42838 W"
+  },
+  "La Ronge, Saskatchewan": {
+    "lat": "55.10053 N",
+    "lon": "105.29005 W"
+  },
+  "London, Ontario": {
+    "lat": "42.98367 N",
+    "lon": "81.24961 W"
+  },
+  "Lumsden, Saskatchewan": {
+    "lat": "50.64630 N",
+    "lon": "104.86594 W"
+  },
+  "Maple Creek, Saskatchewan": {
+    "lat": "49.90569 N",
+    "lon": "109.48002 W"
+  },
+  "Meadow Lake, Saskatchewan": {
+    "lat": "54.13026 N",
+    "lon": "108.43506 W"
+  },
+  "Melville, Saskatchewan": {
+    "lat": "50.93072 N",
+    "lon": "102.80730 W"
+  },
+  "Montague, Prince Edward Island": {
+    "lat": "46.17089 N",
+    "lon": "62.65383 W"
+  },
+  "Montreal, Quebec": {
+    "lat": "45.50318 N",
+    "lon": "73.56981 W"
+  },
+  "Moose Jaw, Saskatchewan": {
+    "lat": "50.39672 N",
+    "lon": "105.53567 W"
+  },
+  "North Battleford, Saskatchewan": {
+    "lat": "52.77619 N",
+    "lon": "108.30048 W"
+  },
+  "Pasqua, Saskatchewan": {
+    "lat": "50.37467 N",
+    "lon": "105.38487 W"
+  },
+  "Peel Region, Ontario": {
+    "lat": "43.74587 N",
+    "lon": "79.79623 W"
+  },
+  "Prince Albert, Saskatchewan": {
+    "lat": "53.20203 N",
+    "lon": "105.75590 W"
+  },
+  "Regina, Saskatchewan": {
+    "lat": "50.44797 N",
+    "lon": "104.61588 W"
+  },
+  "Saskatoon, Saskatchewan": {
+    "lat": "52.13180 N",
+    "lon": "106.66077 W"
+  },
+  "Souris, Prince Edward Island": {
+    "lat": "46.35653 N",
+    "lon": "62.25043 W"
+  },
+  "Southey, Saskatchewan": {
+    "lat": "50.93874 N",
+    "lon": "104.50555 W"
+  },
+  "St. John's, Newfoundland and Labrador": {
+    "lat": "47.56468 N",
+    "lon": "52.70670 W"
+  },
+  "Sudbury, Ontario": {
+    "lat": "46.49272 N",
+    "lon": "80.99121 W"
+  },
+  "Summerside, Prince Edward Island": {
+    "lat": "46.39426 N",
+    "lon": "63.78924 W"
+  },
+  "Swift Current, Saskatchewan": {
+    "lat": "50.28491 N",
+    "lon": "107.79845 W"
+  },
+  "Toronto, Ontario": {
+    "lat": "43.65348 N",
+    "lon": "79.38393 W"
+  },
+  "Trenton, Nova Scotia": {
+    "lat": "45.61402 N",
+    "lon": "62.63312 W"
+  },
+  "Unity, Saskatchewan": {
+    "lat": "52.44285 N",
+    "lon": "109.15490 W"
+  },
+  "Metro Vancouver, British Columbia": {
+    "lat": "49.26187 N",
+    "lon": "122.95555 W"
+  },
+  "Victoria, British Columbia": {
+    "lat": "48.42832 N",
+    "lon": "123.36495 W"
+  },
+  "Watrous, Saskatchewan": {
+    "lat": "51.67515 N",
+    "lon": "105.46554 W"
+  },
+  "Weyburn, Saskatchewan": {
+    "lat": "49.66512 N",
+    "lon": "103.85403 W"
+  },
+  "Whitehorse, Yukon": {
+    "lat": "60.72157 N",
+    "lon": "135.05493 W"
+  },
+  "Winnipeg, Manitoba": {
+    "lat": "49.89554 N",
+    "lon": "97.13846 W"
+  },
+  "Yarmouth, Nova Scotia": {
+    "lat": "43.83726 N",
+    "lon": "66.11570 W"
+  },
+  "Yorkton, Saskatchewan": {
+    "lat": "51.21205 N",
+    "lon": "102.46124 W"
+  },
+  "Île-à-la-Crosse, Saskatchewan": {
+    "lat": "55.43309 N",
+    "lon": "107.89726 W"
+  }
+}

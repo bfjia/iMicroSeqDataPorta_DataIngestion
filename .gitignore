@@ -216,3 +216,19 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# --- ProjectIngestion ------------------------------------------------------
+# Original workflow, kept locally as a read-only reference
+old/
+# Per-run logs and working files, and the latest notification digest
+runs/
+msg.md
+# Downloaded and curated data: large and regenerated every run
+data_ETL/*/raw/*
+data_ETL/*/curated/*
+!data_ETL/*/raw/.gitkeep
+!data_ETL/*/curated/.gitkeep
+# Portal credentials (the generic .env rule above covers this too)
+upload_workflow/.env
+# Editor settings
+.vscode/

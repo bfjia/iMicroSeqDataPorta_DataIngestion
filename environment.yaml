@@ -1,0 +1,18 @@
+# Conda environment for the iMicroSeq data ingestion pipeline.
+#
+#   conda env create -f environment.yaml      # first time
+#   conda env update -f environment.yaml      # after this file changes
+#   conda activate ProjectIngestion
+#
+# Versions are pinned to what the pipeline was tested with (2026-10-30).
+name: ProjectIngestion
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12.16
+  - pandas=3.1.0          # parser, dedupe, diff, filters
+  - numpy=2.5.4           # pandas dependency, pinned for reproducibility
+  - requests=2.34.2       # portal API, PHAC geocoding
+  - python-dotenv=1.2.4   # getToken.py reads upload_workflow/.env
+  - tqdm=4.70.1           # parser progress bar
+  - python-dateutil=3.0.0 # pandas dependency, pinned for reproducibility
