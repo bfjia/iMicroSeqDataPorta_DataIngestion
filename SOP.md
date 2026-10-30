@@ -93,7 +93,7 @@ The 🟡 section looks like this:
 
 ```
 ## 🟡 PHAC-NWMP: review and commit submission 412
-**165 new records** (collection weeks 2026-10-18 to 2026-10-18) passed validation ...
+**155 new records** (collection weeks 2026-10-18 to 2026-10-18) passed validation ...
 - Review and commit: https://dev.virusseq-dataportal.ca/submission/environmental/412
 ```
 
@@ -102,7 +102,7 @@ The 🟡 section looks like this:
 2. **Check before committing:**
    - the submission number on the page matches the one in `msg.md`;
    - the status is **VALID** with **no errors**;
-   - the number of records matches `msg.md` (e.g. 165);
+   - the number of records matches `msg.md` (e.g. 155);
    - spot-check a few records: dates are recent, places look right, and the values aren't blank.
 3. If anything looks wrong, **don't commit.** See "When to ask for help" at the end.
 
@@ -146,8 +146,8 @@ This does everything except the upload. `msg.md` then says 🟢 *dry run* and ho
 
 ### Procedure C: the first load for a new source
 
-The data team usually does this one together with you. A first load is bigger than the usual size
-limit, so it needs `--force`:
+The data team usually does this one together with you. A first load is often bigger than the usual
+size limit, so it is run with `--force`:
 
 ```bash
 ./run_source.sh PHAC --dry-run --force    # 1. check the numbers first

@@ -11,7 +11,7 @@ portal website**. The pipeline never publishes anything by itself.
 
 > **Environment:** everything currently points at the **dev** portal
 > (`dev.virusseq-dataportal.ca`), category `imicroseq_wastewater`. Dev only receives records
-> from collection weeks on or after `DEV_MIN_START_DATE` (2026-08-01, set in `pipeline.conf`).
+> from collection weeks on or after `DEV_MIN_START_DATE` (2026-09-01, set in `pipeline.conf`).
 
 ---
 
@@ -117,7 +117,7 @@ stops. It never assumes nothing is pending.
 | **Script** | `upload_workflow/filter_rows.py` |
 | **Input → output** | `UPLOAD_CSV` → `in_scope.csv`. The log shows `kept=… before_cutoff=… undated=…`. |
 | **Fails as** | `failed` (🔴) if nothing is left in the window, which suggests a stale feed |
-| **Run alone** | `python upload_workflow/filter_rows.py --input X.csv --output Y.csv --min-start-date 2026-08-01` |
+| **Run alone** | `python upload_workflow/filter_rows.py --input X.csv --output Y.csv --min-start-date 2026-09-01` |
 
 ### Step 4: Portal snapshot
 
@@ -232,7 +232,7 @@ if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
 
 | Key | Default | Meaning |
 |---|---|---|
-| `DEV_MIN_START_DATE` | `2026-08-01` | Only weeks on or after this date are uploaded. `""` = no cutoff. |
+| `DEV_MIN_START_DATE` | `2026-09-01` | Only weeks on or after this date are uploaded. `""` = no cutoff. |
 | `DEFAULT_MAX_NEW` | `2000` | Size guard for sources that don't set `MAX_NEW` |
 
 **`data_ETL/<SOURCE>/source.conf`**:

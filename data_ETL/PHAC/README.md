@@ -99,5 +99,5 @@ the row with a non-blank `geo loc name (site)` and preserves the original order.
   e.g. 155 vs ~215, and its values may be revised later. Records that arrive later are picked up
   as new on later runs. Revised values of already-published records show up as "changed" FYIs and
   are not re-uploaded.
-- **Dev window.** Dev only receives weeks from `DEV_MIN_START_DATE` (2026-08-01) on. That is
-  2,529 records in the 2026-10-30 feed.
+- **Dev window.** Dev only receives weeks from `DEV_MIN_START_DATE` (2026-09-01) on. That is
+  1,437 records (7 weeks) in the 2026-10-30 feed.

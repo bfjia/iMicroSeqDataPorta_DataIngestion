@@ -15,7 +15,7 @@
 # README.md explains each step in detail; SOP.md is the plain-language guide.
 #
 #   ./run_source.sh PHAC
-#   ./run_source.sh PHAC --force --holdout-weeks 1 --holdout-random 10 --keep-work
+#   ./run_source.sh PHAC --holdout-weeks 1 --keep-work
 
 set -euo pipefail
 

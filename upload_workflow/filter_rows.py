@@ -9,7 +9,7 @@ is kept.
 
 The last line printed is ``kept=<N> before_cutoff=<M> undated=<K>``.
 
-    python filter_rows.py --input in.csv --output out.csv --min-start-date 2026-08-01
+    python filter_rows.py --input in.csv --output out.csv --min-start-date 2026-09-01
 """
 
 import argparse
