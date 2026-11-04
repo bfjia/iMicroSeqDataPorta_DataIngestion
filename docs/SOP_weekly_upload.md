@@ -7,6 +7,8 @@ the portal website.
 You don't need to understand the code. Follow the steps in order, and copy the commands exactly as
 written. If something goes wrong, the tool says so in plain words in a file called `msg.md`.
 
+Adding a new data source is a separate procedure: [SOP_new_source.md](SOP_new_source.md).
+
 > **There are two portals.** The **test (dev) portal** is `dev.virusseq-dataportal.ca`. The
 > **real (prod) portal** is `imicroseq-dataportal.ca`. Every command uses **dev** unless you add
 > `--env prod` to it. The first line of every message says which portal, `(dev)` or `(prod)`.
@@ -252,7 +254,8 @@ website afterwards (the weekly routine above).
 > **Know the limits first.** cron only works while the PC is on **and** a WSL (Ubuntu) window is
 > open. If the PC is off or WSL is closed at the scheduled time, that week's run is simply
 > skipped; do it by hand with Procedure A. For a schedule that works without a WSL window open,
-> ask the data team to set up Windows Task Scheduler instead (see `README.md`).
+> ask the data team to set up Windows Task Scheduler instead (see
+> [configuration.md](configuration.md), "Scheduling the weekly run").
 
 1. **Open your schedule for editing:**
 

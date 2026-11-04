@@ -53,37 +53,7 @@ suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a source on dev on
 source's values on both portals with `./list_sources.sh`. Add `--check` to also confirm that each
 portal's account can write to the organization.
 
-## Adding a new source, step by step
+## Adding a new source
 
-1. **Copy the template:**
-   ```bash
-   cp -r data_ETL/_template data_ETL/<NAME>
-   ```
-2. **Write the converter** in `data_ETL/<NAME>/scripts/`. Take `PHAC/scripts/parser.py` as the
-   model: one explicit assignment per iMicroSeq field, with lookups as hardcoded dictionaries. Use
-   iMicroSeq picklist values exactly as they appear in `data_specification/enums.tsv`, e.g.
-   `Not Provided [GENEPIO:0001668]`. Print `[MISSING] …` for values it can't resolve, and leave
-   them blank rather than guessing.
-3. **Fill in `etl.sh`:** fetch → convert → dedupe, writing `UPLOAD_CSV`.
-4. **Fill in `source.conf`.** Keep `ENABLED=0` for now. Set `ORGANIZATION_DEV` and
-   `ORGANIZATION_PROD`, ask the portal admins to grant the accounts `WW-<ORG>.WRITE` on each
-   portal, then check with `./list_sources.sh --check` (`CAN_WRITE` must say `yes`).
-5. **Run the ETL on its own** and check the output:
-   ```bash
-   conda activate ProjectIngestion
-   bash data_ETL/<NAME>/etl.sh
-   ```
-   Check that the columns match the iMicroSeq titles (the upload step fails on any unknown column)
-   and that the sample IDs are unique.
-6. **Dry-run the whole pipeline** for it. This logs in and reads from the portal but uploads
-   nothing:
-   ```bash
-   ./run_source.sh <NAME> --dry-run
-   ```
-   Read `msg.md` and `runs/<stamp>/<SOURCE_ID>/delta.csv`.
-7. **First load:** agree it with the data owner, then run `./run_source.sh <NAME> --force`. A
-   person reviews and **commits it on the website**. Do dev first. For prod, repeat with
-   `--env prod`; prod has no date window, so its first load is the full history.
-8. **Enable it:** set `ENABLED=1` so `run_weekly.sh` includes it, and add it to the table at the
-   top of this file. `ENABLED_PROD=0` keeps it out of prod runs until it's ready there.
-9. **Document it** in `data_ETL/<NAME>/README.md`, using `PHAC/README.md` as the model.
+Follow **[docs/SOP_new_source.md](../docs/SOP_new_source.md)**. It goes from copying `_template/`
+to weekly runs on dev and prod, with the checks to run at each step.

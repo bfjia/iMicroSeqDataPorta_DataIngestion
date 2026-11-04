@@ -8,8 +8,8 @@ its own. `main.py` chains the upload stages together.
 > The original `step7_commit.py` and `main.py --commit` are deliberately not part of this copy.
 > They are still in `old/` for reference only.
 
-**Running it as an operator?** Use [`../SOP.md`](../SOP.md). **Want the whole flow?** See
-[`../README.md`](../README.md).
+**Running it as an operator?** Use [`../docs/SOP_weekly_upload.md`](../docs/SOP_weekly_upload.md).
+**Want the whole flow?** See [`../docs/how_a_run_works.md`](../docs/how_a_run_works.md).
 
 ## How the portal works
 

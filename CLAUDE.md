@@ -9,7 +9,9 @@ data standard (`data_specification/`), and **uploads and validates** it on the d
 person then reviews and **commits** each submission on the portal website. Sources are plug-in
 folders under `data_ETL/`. PHAC (NWMP) is the first one.
 
-- Technical guide: `README.md`. Plain-language procedure: `SOP.md`.
+- Docs live in `docs/`: `SOP_weekly_upload.md` and `SOP_new_source.md` (plain-language
+  procedures), `how_a_run_works.md` and `configuration.md` (technical). `README.md` stays short and
+  non-technical: what the tool is, links, quick start.
 - Repo: https://github.com/bfjia/iMicroSeqDataPorta_DataIngestion. Push to `main`.
 
 ## Rules (from the project owner, all mandatory)
@@ -42,12 +44,14 @@ folders under `data_ETL/`. PHAC (NWMP) is the first one.
    `data_ETL/*/raw|curated/*` and `old/` are gitignored. Check `git status` before every commit.
 8. **`old/` is read-only.** It is the original workflow, kept as a reference. Copy from it, never
    edit it.
-9. **Keep the docs in step with the code.** Any behaviour change updates `README.md` (technical),
-   `SOP.md` (plain language), and the relevant folder README in the same change.
+9. **Keep the docs in step with the code.** Any behaviour change updates the matching files in
+   `docs/` (`how_a_run_works.md` / `configuration.md` for the technical side, the SOPs for the
+   plain-language side) and the relevant folder README, in the same change. Keep `README.md` short.
 
 ## Layout
 
 ```
+docs/                  SOPs (weekly upload, new source) + technical guides (how a run works, configuration)
 run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
 run_source.sh          one source: pending check -> ETL -> date window -> snapshot -> diff -> guard -> upload+validate
 close_submission.sh    discard a source's open submission (asks for its number) so a new one can start

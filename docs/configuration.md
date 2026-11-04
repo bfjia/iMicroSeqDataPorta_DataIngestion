@@ -1,0 +1,142 @@
+# Commands, settings, portals and scheduling
+
+Reference for running the pipeline: every command and option, the settings files, the two portals
+(dev and prod), and how to schedule the weekly run. What each step does is in
+[how_a_run_works.md](how_a_run_works.md). The plain-language procedures are
+[SOP_weekly_upload.md](SOP_weekly_upload.md) and [SOP_new_source.md](SOP_new_source.md).
+
+## Commands and options
+
+```
+./run_source.sh <SOURCE> [--env dev|prod] [--dry-run] [--force] [--holdout-weeks N] [--holdout-random N] [--keep-work]
+./run_weekly.sh [--env dev|prod] [--dry-run]
+./close_submission.sh <SOURCE> [--env dev|prod] [--yes]
+./list_sources.sh [--check]
+```
+
+| Option | Effect |
+|---|---|
+| `--env dev\|prod` | Which portal. Without it, `PORTAL_ENV` in `pipeline.conf` (dev). |
+| `--dry-run` | Every step except the upload. It still logs in and reads from the portal. |
+| `--force` | Upload even if new > `MAX_NEW` (first loads, known backfills) |
+| `--holdout-weeks N` / `--holdout-random N` | TEST ONLY: hold back rows to create a delta for the next run |
+| `--keep-work` | Keep `in_scope.csv`, `published.csv` and `submit/` |
+
+`run_weekly.sh` runs every folder in `data_ETL/` that has a `source.conf` with `ENABLED=1` (or
+`ENABLED_DEV` / `ENABLED_PROD` for that portal).
+Folders starting with `_` are skipped. A failing source doesn't stop the others. Its exit code is 1
+if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
+
+`close_submission.sh` discards the source's open submission (`DELETE /submission/{id}`) so the
+next run can upload a new one. Use it after an INVALID upload whose cause is fixed, or when the
+data has to be redone. The portal website has no way to close a submission yet, so this is the
+only way short of `main.py --replace`.
+
+- **What it touches:** only the open, uncommitted submission. Published records are untouched,
+  and it never commits.
+- **Confirmation:** it shows the submission and asks you to type its number. `--yes` skips that.
+  Without a terminal and without `--yes`, it refuses.
+- **Lock:** it takes `runs/.lock`, so it can't run during a pipeline run.
+- **Where the logic lives:** `upload_workflow/close_submission.py`, which reuses
+  `step5_upload.closeSubmission`.
+
+## Settings
+
+**`pipeline.conf`** (applies to every source):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `PORTAL_ENV` | `dev` | Portal used when no `--env` is given, including by the scheduler: `dev` or `prod` |
+| `DEV_MIN_START_DATE` | `2026-09-01` | Dev: only weeks on or after this date are uploaded. `""` = no cutoff. |
+| `PROD_MIN_START_DATE` | `""` | Prod: the same, empty = full history |
+| `DEFAULT_MAX_NEW` | `2000` | Size guard for sources that don't set `MAX_NEW` |
+| `SLACK_CHANNEL` | `C0CDQRKNWFK` | Slack channel ID that gets `msg.md` after each run (#_integration_notifications). `""` = don't post. |
+
+**`data_ETL/<SOURCE>/source.conf`**:
+
+| Key | Example (PHAC) | Meaning |
+|---|---|---|
+| `SOURCE_ID` | `PHAC-NWMP` | Name used for run folders and messages |
+| `ORGANIZATION_DEV` / `ORGANIZATION_PROD` | `PHAC-AUTOINGEST` / `PHAC-NWMP` | **Required, per portal.** The organization the source submits as: the account's Ego scope `WW-<ORG>.WRITE` minus `WW-`. Every portal names it differently, so there's no shared `ORGANIZATION`. |
+| `CATEGORY_DEV` / `CATEGORY_PROD` | `imicroseq_wastewater` / `imicroseq_environmental` | Portal category. The two portals name it differently (same dictionary). |
+| `UPLOAD_CSV` | `curated/PHAC-NWMP.dedup.csv` | What `etl.sh` writes, relative to the source folder |
+| `MAX_NEW` | `2000` | Size guard |
+| `ENABLED` | `1` | `0` = `run_weekly.sh` skips the source |
+
+`CATEGORY`, `MAX_NEW` and `ENABLED` can also be given per portal with a `_DEV` or `_PROD` suffix.
+The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a new source on dev only.
+`upload_workflow/load_source_conf.sh` applies these rules for every script.
+
+`./list_sources.sh` prints the whole mapping, every source on both portals.
+`./list_sources.sh --check` also logs in to each portal and shows whether its account can write to
+each organization:
+
+```
+SOURCE     ID           PORTAL ENABLED  ORGANIZATION         CATEGORY                  CAN_WRITE
+PHAC       PHAC-NWMP    dev    yes      PHAC-AUTOINGEST      imicroseq_wastewater      yes
+PHAC       PHAC-NWMP    prod   yes      PHAC-NWMP            imicroseq_environmental   yes
+```
+
+**`upload_workflow/.env`** (never committed): one login per portal, `devPortalUser` /
+`devPortalPass` and `prodPortalUser` / `prodPortalPass`, and `duoliauthtoken`, the Slack bot's
+OAuth token (only needed when `SLACK_CHANNEL` is set). `.env.example` shows the format.
+
+## Dev and prod
+
+The portal is chosen per run: `--env dev|prod`, else `PORTAL_ENV` in `pipeline.conf` (`dev`). The
+bash scripts export it as `$PORTAL_ENV`, and every Python script reads it through
+`upload_workflow/portal_env.py`, the one place the hosts live. To run a Python script on its own
+against prod: `PORTAL_ENV=prod python upload_workflow/check_pending.py --organization …`.
+
+| | dev | prod |
+|---|---|---|
+| Website | `dev.virusseq-dataportal.ca` | `imicroseq-dataportal.ca` |
+| Submission service | `submission-service.dev.virusseq-dataportal.ca` | `submissions.imicroseq-dataportal.ca` |
+| Login | `ego.dev…` → `keycloak.dev…` | `ego.imicroseq-dataportal.ca` → `keycloak.imicroseq-dataportal.ca` |
+| Category | `imicroseq_wastewater` (id 3) | `imicroseq_environmental` (id 1) |
+| Dictionary | `imicroseq_wastewater` v1.17, 163 fields | identical (checked 2026-10-30) |
+| Account (`.env`) | `devPortalUser` / `devPortalPass` | `prodPortalUser` / `prodPortalPass` |
+| Date window | from 2026-09-01 | full history |
+| Review link | `https://dev.virusseq-dataportal.ca/submission/environmental/<id>` | `https://imicroseq-dataportal.ca/submission/environmental/<id>` |
+| PHAC organization | `PHAC-AUTOINGEST` | `PHAC-NWMP` |
+
+**Prod status (2026-11-03).** Nothing has been uploaded to prod by this pipeline.
+
+- **Permission:** the prod account has `WW-PHAC-NWMP.WRITE`.
+- **Blocked by an old empty submission:** submission 233 for `PHAC-NWMP` is open (status `OPEN`,
+  0 records, created 2026-07-14). Every prod run stops at the pending check until it's closed
+  (`./close_submission.sh PHAC --env prod`).
+- **First load:** a prod dry run finds all 51,224 PHAC records as new. That is over `MAX_NEW`, so
+  it needs `--force`. A single upload that size is untested and may need splitting into chunks.
+
+Commits stay manual on the website, in both portals. `runs/`, `msg.md` and the Slack channel are
+shared by both; the run log, `status.env` (`PORTAL_ENV`) and the `msg.md` headline say which portal
+a run used.
+
+## Scheduling the weekly run
+
+Nothing is scheduled yet. Pick a day after the source's weekly update, and choose one of these:
+
+**Windows Task Scheduler** (recommended on this machine). It works without a WSL window open, as
+long as the PC is on. Find your distro name with `wsl.exe -l -v`, then run this from Windows
+(PowerShell or cmd):
+
+```
+schtasks /Create /TN "iMicroSeq weekly ingestion" /SC WEEKLY /D MON /ST 09:00 ^
+  /TR "wsl.exe -d <Distro> -- bash -lc '/mnt/d/OneDrive/ProjectIngestion/run_weekly.sh'"
+```
+
+**cron inside WSL.** This only fires while WSL is running. This WSL has no systemd, so the cron
+service has to be started after every WSL restart (`sudo service cron start`), unless systemd is
+enabled in `/etc/wsl.conf`. Step-by-step for operators: [SOP_weekly_upload.md](SOP_weekly_upload.md), Procedure J.
+
+```
+0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
+```
+
+cron gives the script a bare environment (`PATH=/usr/bin:/bin`, no conda, working directory
+`$HOME`). This was tested with `env -i` and works. `runs/cron.log` only captures what the
+scheduler itself sees; each run's full log is in `runs/<stamp>/weekly.log`.
+
+`run_weekly.sh` activates the `ProjectIngestion` conda env by itself. It looks for `$CONDA_EXE`,
+falling back to `~/miniconda3/bin/conda`.

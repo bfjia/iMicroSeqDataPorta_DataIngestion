@@ -12,7 +12,8 @@
 #
 # It NEVER publishes. A VALID upload is left open for a person to review and
 # commit on the portal website. Every run writes a status for msg.md.
-# README.md explains each step in detail; SOP.md is the plain-language guide.
+# docs/how_a_run_works.md explains each step in detail;
+# docs/SOP_weekly_upload.md is the plain-language guide.
 #
 # The portal is dev or prod: --env, else PORTAL_ENV in pipeline.conf.
 #

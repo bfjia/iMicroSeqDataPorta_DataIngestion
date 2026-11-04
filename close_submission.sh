@@ -10,7 +10,7 @@
 #
 # The portal is --env, else PORTAL_ENV in pipeline.conf. Only an open
 # (uncommitted) submission can be closed. Published records are never touched,
-# and nothing is ever committed. SOP.md, Procedure L.
+# and nothing is ever committed. docs/SOP_weekly_upload.md, Procedure L.
 
 set -euo pipefail
 

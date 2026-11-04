@@ -1,7 +1,7 @@
 # TEMPLATE source
 
 Copy this folder to `data_ETL/<NAME>/` to add a data source. Then follow the step-by-step guide in
-[`data_ETL/README.md`](../README.md#adding-a-new-source-step-by-step).
+[`docs/SOP_new_source.md`](../../docs/SOP_new_source.md).
 
 Replace this file with the source's own README. It should cover:
 

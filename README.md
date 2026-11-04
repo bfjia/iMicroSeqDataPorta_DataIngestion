@@ -1,378 +1,78 @@
 # iMicroSeq data ingestion
 
-A weekly pipeline that downloads external wastewater surveillance data and converts it to the
-[iMicroSeq data standard](data_specification/). It then **uploads and validates** the records
-that are not yet on the data portal. A person reviews each submission and **commits it on the
-portal website**. The pipeline never publishes anything by itself.
+Every week, this tool downloads wastewater surveillance data from outside sources, converts it to
+the [iMicroSeq data standard](data_specification/), and uploads the records that are new to the
+iMicroSeq data portal, where they're checked. A person then reviews each upload and **publishes
+("commits") it on the portal website**. The tool never publishes anything by itself.
 
-- **Running it week to week, without coding?** Follow **[SOP.md](SOP.md)**.
-- **Adding a data source?** See **[data_ETL/README.md](data_ETL/README.md)**.
-- **Working on the code?** Read this file and **[CLAUDE.md](CLAUDE.md)** (project rules).
+There's one source so far: PHAC's National Wastewater Monitoring of Pathogens. More can be added,
+each as its own folder.
 
-> **Two portals:** **dev** (`dev.virusseq-dataportal.ca`, the default) and **prod**
-> (`imicroseq-dataportal.ca`). Every script takes `--env dev|prod`; without it, `PORTAL_ENV` in
-> `pipeline.conf` decides. Dev receives collection weeks from 2026-09-01 on; prod gets the full
-> history. See [Dev and prod](#dev-and-prod).
+## Documentation
 
----
+| I want to… | Read |
+|---|---|
+| run the weekly upload, then review and commit it | [docs/SOP_weekly_upload.md](docs/SOP_weekly_upload.md) |
+| add a new data source | [docs/SOP_new_source.md](docs/SOP_new_source.md) |
+| understand what each step of a run does | [docs/how_a_run_works.md](docs/how_a_run_works.md) |
+| look up commands, settings, the two portals or scheduling | [docs/configuration.md](docs/configuration.md) |
+| change the code | [CLAUDE.md](CLAUDE.md) (project rules), [data_ETL/README.md](data_ETL/README.md), [upload_workflow/README.md](upload_workflow/README.md) |
+
+## Two portals
+
+| | Address | Used |
+|---|---|---|
+| **dev** (test) | `dev.virusseq-dataportal.ca` | by default |
+| **prod** (real) | `imicroseq-dataportal.ca` | when you add `--env prod` to a command |
+
+Committing on the prod website publishes the records for real.
 
 ## Quick start
 
 ```bash
 cd /mnt/d/OneDrive/ProjectIngestion
-conda env create -f environment.yaml        # once
-cp upload_workflow/.env.example upload_workflow/.env   # once, then fill in the portal login + Slack token
+conda env create -f environment.yaml                    # once
+cp upload_workflow/.env.example upload_workflow/.env    # once, then fill in the logins
 conda activate ProjectIngestion
 
-./run_source.sh PHAC --dry-run   # everything except the upload: shows what would be uploaded
-./run_source.sh PHAC             # upload + validate one source; then commit it on the website
-./run_weekly.sh                  # every enabled source; this is what the scheduler runs
-./run_weekly.sh --env prod --dry-run   # the same against prod, uploading nothing
-cat msg.md                       # the run's notification: what happened, what to do
+./run_weekly.sh --dry-run    # see what would be uploaded; uploads nothing
+./run_weekly.sh              # upload and check the new records
+cat msg.md                   # what happened, and what to do next
 ```
+
+Then review and commit the upload on the website, using the link in `msg.md`. The full routine is
+in [docs/SOP_weekly_upload.md](docs/SOP_weekly_upload.md).
+
+## What a run does
+
+1. **Checks** that nothing from an earlier run is still waiting on the portal. If something is,
+   it stops and reminds you.
+2. **Downloads and converts** each source's latest data.
+3. **Compares** it with what's already published, and keeps only the new records.
+4. **Uploads them and waits for the portal's checks**, then stops. A person commits.
+5. **Writes one short message**, `msg.md`, which is also posted to Slack: all good, action
+   needed, or a problem.
+
+Step-by-step detail is in [docs/how_a_run_works.md](docs/how_a_run_works.md).
 
 ## Folder layout
 
 ```
-ProjectIngestion/
-├── run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
-├── run_source.sh          one source end to end (steps 1-8 below)
-├── close_submission.sh    discard a source's open (uncommitted) submission to start over
-├── list_sources.sh        every source's organization/category on dev and prod (--check: permissions)
-├── pipeline.conf          pipeline-wide settings (default portal, date windows, size limit, Slack)
-├── msg.md                 latest notification digest (every run; posted to Slack; gitignored)
-├── SOP.md                 plain-language procedure
-├── CLAUDE.md              project rules for contributors
-├── environment.yaml       conda env "ProjectIngestion" (requirements.txt mirrors it for pip)
-├── data_specification/    the iMicroSeq standard: fields.tsv, enums.tsv
-├── data_ETL/              one folder per data source
-│   ├── README.md          the source contract, how to add a source
-│   ├── _template/         copy-me skeleton
-│   └── PHAC/              PHAC National Wastewater Monitoring of Pathogens (see its README)
-├── upload_workflow/       portal API scripts + pipeline helpers (see its README)
-├── runs/                  one folder per run: logs and working files (gitignored)
-└── old/                   the original workflow, kept read-only for reference (gitignored)
+docs/                  procedures (SOPs) and technical guides
+data_ETL/              one folder per data source (PHAC, plus _template to copy)
+upload_workflow/       the scripts that talk to the portal
+data_specification/    the iMicroSeq standard: fields and allowed values
+run_weekly.sh          run every source (what the schedule runs)
+run_source.sh          run one source
+close_submission.sh    throw away an uncommitted upload, to start over
+list_sources.sh        each source's organization on dev and prod
+pipeline.conf          settings shared by all sources
+runs/                  logs from each run (not saved to git)
 ```
 
-## How a run works
+## Ground rules
 
-```mermaid
-flowchart TD
-    W([run_weekly.sh]) -->|each enabled source| S([run_source.sh SOURCE])
-    S --> P1["1. Pending check<br/>login, then: is a submission still open?"]
-    P1 -->|"yes"| STOPW([stop: remind to commit / fix])
-    P1 -->|"no"| P2["2. ETL<br/>data_ETL/SOURCE/etl.sh"]
-    P2 --> P3["3. Date window<br/>keep weeks ≥ DEV_ / PROD_MIN_START_DATE"]
-    P3 --> P4["4. Portal snapshot<br/>what the org already published"]
-    P4 --> P5["5. Diff<br/>new / changed / unchanged"]
-    P5 --> P6{"6. Size guard<br/>new = 0? new > MAX_NEW?"}
-    P6 -->|"new = 0"| STOPN([stop: nothing new])
-    P6 -->|"too many"| STOPG([stop: guard])
-    P6 -->|"ok"| P7["7. Upload + validate<br/>main.py (never commits)"]
-    P7 -->|VALID| REV([waiting for a person to commit on the website])
-    P7 -->|INVALID| INV([stop: see errors on the website])
-    STOPW & STOPN & STOPG & REV & INV --> N["8. Notification<br/>status.env → msg.md"]
-```
-
-Each source's run gets its own folder, `runs/<YYYYmmdd-HHMMSS>/<SOURCE_ID>/`. A weekly run puts all
-its sources under one timestamp and adds `weekly.log`.
-
----
-
-## The steps in detail
-
-The `[n/7]` banners in the log match steps 1–7. Step 8 runs when the source finishes, however it
-finishes.
-
-### Step 1: Pending check (before any work)
-
-| | |
-|---|---|
-| **What** | Logs in, then asks the portal whether a submission is still open for the source's organization. If one is, the run stops before downloading anything. |
-| **Why** | Commits happen on the website, so last week's submission may still be waiting: VALID and not yet committed, or INVALID and not yet fixed. Uploading again would *append* to it and stage every record twice. New records simply go up on the first run after it is committed. |
-| **Scripts** | `upload_workflow/step1_token.py` (login, via `getToken.py` and `upload_workflow/.env`), then `upload_workflow/check_pending.py` |
-| **Portal calls** | Ego/Keycloak login on `ego.<portal>` with that portal's account from `.env`; `GET /category`; `GET /submission/category/{id}?onlyActive=true&organization=…` |
-| **Output** | `status.env` gets `PENDING_*` values when something is open |
-| **Also checks** | that the token carries the scope `WW-<ORG>.WRITE` (the organization's write permission). Missing → `failed`; in a `--dry-run` it's only a warning plus an FYI line, so you can still see what would be uploaded. |
-| **Fails as** | `waiting` (🟡 VALID, waiting for a commit), `waiting_invalid` (🔴 INVALID, waiting for a fix), `failed` (🔴 login, network or permission problem) |
-| **Run alone** | `python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST` |
-
-The submission listing only shows the *logged-in user's* submissions, which is why this logs in
-first. An anonymous call would always say "nothing open". If the check itself errors, the run
-stops. It never assumes nothing is pending.
-
-### Step 2: ETL
-
-| | |
-|---|---|
-| **What** | Runs the source's `etl.sh`, which fetches the source data and writes an upload-ready CSV in iMicroSeq format. |
-| **Why** | Each source has its own format, so this is the only source-specific step. Everything after it is generic. |
-| **Script** | `data_ETL/<SOURCE>/etl.sh` (the contract is in [data_ETL/README.md](data_ETL/README.md); PHAC's steps are in [data_ETL/PHAC/README.md](data_ETL/PHAC/README.md)) |
-| **Input → output** | source feed → `data_ETL/<SOURCE>/<UPLOAD_CSV>` (one row per sample ID). The ETL output is copied to `etl.log`. Any `[MISSING]` lines the parser prints go to `missing.txt`. |
-| **Fails as** | `failed` (🔴) if `etl.sh` exits non-zero or doesn't write `UPLOAD_CSV`. Values the parser could not resolve are an FYI in `msg.md`, not a failure. |
-| **Run alone** | `bash data_ETL/PHAC/etl.sh` |
-
-### Step 3: Date window
-
-| | |
-|---|---|
-| **What** | Keeps only rows whose `sample collection start date` is on or after the portal's cutoff in `pipeline.conf`: `DEV_MIN_START_DATE` (2026-09-01) or `PROD_MIN_START_DATE` (empty: full history). While a cutoff is set, rows with no valid date are dropped too. |
-| **Why** | Dev doesn't need every source's full history. An empty value means no cutoff. |
-| **Script** | `upload_workflow/filter_rows.py` |
-| **Input → output** | `UPLOAD_CSV` → `in_scope.csv`. The log shows `kept=… before_cutoff=… undated=…`. |
-| **Fails as** | `failed` (🔴) if nothing is left in the window, which suggests a stale feed |
-| **Run alone** | `python upload_workflow/filter_rows.py --input X.csv --output Y.csv --min-start-date 2026-09-01` |
-
-### Step 4: Portal snapshot
-
-| | |
-|---|---|
-| **What** | Downloads every record the organization has already **published**, as a CSV with the same column titles the ETL writes. |
-| **Why** | This is the record of what is already on the portal; there is no local ledger. It stays correct however late (or whether) a person commits. |
-| **Script** | `upload_workflow/fetch_published.py` |
-| **Portal calls** | `GET /dictionary/category/{id}`; `GET /data/category/{id}/organization/{org}?page=…&pageSize=1000`. A 404 "No Submitted data found" means nothing is published yet. |
-| **Output** | `published.csv` |
-| **Value rendering** | Fields the portal omits become empty cells. Lists are joined with the field's declared delimiter (`;`). Numbers become plain text. |
-| **Run alone** | `python upload_workflow/fetch_published.py --organization PHAC-AUTOINGEST --output published.csv` |
-
-### Step 5: Diff (and the test hold-back)
-
-| | |
-|---|---|
-| **What** | Splits the in-window rows by sample ID. **New** means not on the portal. **Changed** means on the portal with different values. **Unchanged** means identical. |
-| **Why** | Sources republish their whole history every week. Only new records may be uploaded, since the portal rejects a sample ID it already holds. |
-| **Script** | `upload_workflow/diff_new_records.py` (numbers are compared numerically, so `4.2712` ≈ `4.27120000`) |
-| **Input → output** | `in_scope.csv` + `published.csv` → `delta.csv` (new; uploaded) and `changed.csv` (revised; **not** uploaded, reported as FYI) |
-| **Fails as** | `failed` (🔴) if either file has a duplicate sample ID, since deduping is the source's job |
-| **Test hold-back** | With `--holdout-weeks N` / `--holdout-random N`, `holdout_rows.py` moves the newest N weeks plus N random older rows out of `delta.csv` into `heldout.csv`. The next run should then find exactly those as new. Use this only to create a delta for testing. |
-| **Run alone** | `python upload_workflow/diff_new_records.py --new in_scope.csv --baseline published.csv --new-out delta.csv --changed-out changed.csv` |
-
-### Step 6: Size guard
-
-| | |
-|---|---|
-| **What** | Stops when there is nothing new (`nothing_new`, 🟢). It also stops when the new count is above `MAX_NEW` (2,000; a normal PHAC week is ~150–300), unless `--force` is given (`guard`, 🔴). |
-| **Why** | A sudden jump usually means the source changed how its IDs are built. Uploading would re-publish old data under new IDs. Use `--force` for an expected large batch, like a first load. |
-| **Dry run** | With `--dry-run`, the run stops here (`dry_run`, 🟢) and `delta.csv` shows what would have been uploaded. |
-
-### Step 7: Upload and validate (never commits)
-
-| | |
-|---|---|
-| **What** | Renames the CSV columns to the dictionary's field names, uploads `delta.csv` as a new submission, and waits for validation. It stops there. |
-| **Script** | `upload_workflow/main.py`, which chains `step1`–`step6` (see [upload_workflow/README.md](upload_workflow/README.md)) |
-| **Portal calls** | `GET /category/{id}`, `GET /dictionary/category/{id}`, `GET /submission/category/{id}?onlyActive=true`, `POST /submission/category/{id}/data`, `GET /submission/{id}` (polled; an event stream) |
-| **Output** | `submit/sample.csv` (renamed copy, deleted after the run) and `result.json` (`submissionId`, `status`, `url`, `rows`, `errors`) |
-| **Ends as** | `review` (🟡 VALID: a person reviews and commits on the website), `invalid` (🔴 see the errors at the link) |
-
-### Step 8: Notification (`msg.md`)
-
-`run_source.sh` records its outcome in `status.env`. `upload_workflow/notify.py` turns all of a
-run's `status.env` files into **one** Markdown digest. It is written to `msg.md` in the repo root
-(overwritten each run) and to `runs/<stamp>/msg.md`. Then `upload_workflow/slack_post.py` posts
-it to Slack (see below).
-
-- **Short on purpose.** A typical message is three lines:
-  ```
-  # 🟡 iMicroSeq (dev): action needed · 2026-11-02 09:00
-  **🟡 PHAC-NWMP:** 212 new records (week 2026-10-25) passed validation. Review and commit:
-  https://dev.virusseq-dataportal.ca/submission/environmental/<number>
-  ```
-- **Headline:** the worst status across sources (🔴 problem > 🟡 action needed > 🟢 all good),
-  and the run time.
-- **One bold line per source** with its own dot, showing its most important status only, and the
-  submission link when there is one. The log path is added only for 🔴 problems; a failed step
-  also gets the last 6 log lines.
-- **FYI lines** never change the headline on their own: unresolved parser values, revised
-  (changed) records, test hold-backs.
-- **No spam:** one message per run, no per-step messages. Reminders repeat only as often as the
-  run (weekly). A quiet week still writes a short 🟢 message, so you can tell the run happened.
-
-| Status | Level | Meaning |
-|---|---|---|
-| `review` | 🟡 | Uploaded and VALID: review and commit it on the website |
-| `waiting` | 🟡 | A VALID submission from an earlier run is still waiting to be committed. Nothing new was uploaded. |
-| `waiting_invalid` | 🔴 | An INVALID submission is still open. Fix the cause, then close it with `close_submission.sh` (the website can't close submissions). |
-| `invalid` | 🔴 | This run's upload failed validation |
-| `guard` | 🔴 | More new records than `MAX_NEW`; nothing uploaded |
-| `failed` | 🔴 | A step errored. The message says which, with the last log lines. |
-| `nothing_new` | 🟢 | Everything is already published |
-| `dry_run` | 🟢 | `--dry-run`: nothing uploaded; `delta.csv` shows what would be |
-
-**Slack.** When `SLACK_CHANNEL` is set in `pipeline.conf`, the same digest is posted to that
-channel, once per run, by `run_weekly.sh` (or by `run_source.sh` run on its own). Dry runs never
-post.
-
-- **How it posts:** `slack_post.py` is modeled on `old/duoli.py`. It uses the bot's OAuth token
-  (`duoliauthtoken` in `upload_workflow/.env`) and `chat.postMessage`, with link previews off.
-- **Markdown:** it converts `msg.md` to Slack's markdown. Headings become bold lines, `**bold**`
-  becomes `*bold*`, `-` bullets become `•`, and `&`, `<`, `>` are escaped.
-- **Failures:** a failed post (wrong channel, bot not in the channel, bad token) prints a warning
-  in the log and doesn't change the run's outcome. `msg.md` is still written.
-- **Preview** what would be posted, sending nothing:
-  `python upload_workflow/slack_post.py --file msg.md --print`.
-
----
-
-## What a run folder contains
-
-`runs/<stamp>/<SOURCE_ID>/`:
-
-| File | Kept? | Contents |
-|---|---|---|
-| `run.log` | yes | the full log of this source's run |
-| `status.env` | yes | `KEY=value` outcome, read by `notify.py` |
-| `etl.log` | yes | the ETL's own output |
-| `missing.txt` | yes | values the parser couldn't resolve (empty = none) |
-| `delta.csv` | yes | the new records (what was, or would be, uploaded) |
-| `changed.csv` | yes | already-published records whose values changed at the source |
-| `heldout.csv` | yes | test hold-back rows (only with `--holdout-*`) |
-| `result.json` | yes | upload outcome (only if an upload happened) |
-| `in_scope.csv`, `published.csv`, `submit/` | `--keep-work` only | bulky intermediates |
-
-`runs/<stamp>/msg.md` is that run's digest, and `runs/<stamp>/weekly.log` is the weekly runner's
-log.
-
-## Commands and options
-
-```
-./run_source.sh <SOURCE> [--env dev|prod] [--dry-run] [--force] [--holdout-weeks N] [--holdout-random N] [--keep-work]
-./run_weekly.sh [--env dev|prod] [--dry-run]
-./close_submission.sh <SOURCE> [--env dev|prod] [--yes]
-./list_sources.sh [--check]
-```
-
-| Option | Effect |
-|---|---|
-| `--env dev\|prod` | Which portal. Without it, `PORTAL_ENV` in `pipeline.conf` (dev). |
-| `--dry-run` | Every step except the upload. It still logs in and reads from the portal. |
-| `--force` | Upload even if new > `MAX_NEW` (first loads, known backfills) |
-| `--holdout-weeks N` / `--holdout-random N` | TEST ONLY: hold back rows to create a delta for the next run |
-| `--keep-work` | Keep `in_scope.csv`, `published.csv` and `submit/` |
-
-`run_weekly.sh` runs every folder in `data_ETL/` that has a `source.conf` with `ENABLED=1` (or
-`ENABLED_DEV` / `ENABLED_PROD` for that portal).
-Folders starting with `_` are skipped. A failing source doesn't stop the others. Its exit code is 1
-if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
-
-`close_submission.sh` discards the source's open submission (`DELETE /submission/{id}`) so the
-next run can upload a new one. Use it after an INVALID upload whose cause is fixed, or when the
-data has to be redone. The portal website has no way to close a submission yet, so this is the
-only way short of `main.py --replace`.
-
-- **What it touches:** only the open, uncommitted submission. Published records are untouched,
-  and it never commits.
-- **Confirmation:** it shows the submission and asks you to type its number. `--yes` skips that.
-  Without a terminal and without `--yes`, it refuses.
-- **Lock:** it takes `runs/.lock`, so it can't run during a pipeline run.
-- **Where the logic lives:** `upload_workflow/close_submission.py`, which reuses
-  `step5_upload.closeSubmission`.
-
-## Configuration
-
-**`pipeline.conf`** (applies to every source):
-
-| Key | Default | Meaning |
-|---|---|---|
-| `PORTAL_ENV` | `dev` | Portal used when no `--env` is given, including by the scheduler: `dev` or `prod` |
-| `DEV_MIN_START_DATE` | `2026-09-01` | Dev: only weeks on or after this date are uploaded. `""` = no cutoff. |
-| `PROD_MIN_START_DATE` | `""` | Prod: the same, empty = full history |
-| `DEFAULT_MAX_NEW` | `2000` | Size guard for sources that don't set `MAX_NEW` |
-| `SLACK_CHANNEL` | `C0CDQRKNWFK` | Slack channel ID that gets `msg.md` after each run (#_integration_notifications). `""` = don't post. |
-
-**`data_ETL/<SOURCE>/source.conf`**:
-
-| Key | Example (PHAC) | Meaning |
-|---|---|---|
-| `SOURCE_ID` | `PHAC-NWMP` | Name used for run folders and messages |
-| `ORGANIZATION_DEV` / `ORGANIZATION_PROD` | `PHAC-AUTOINGEST` / `PHAC-NWMP` | **Required, per portal.** The organization the source submits as: the account's Ego scope `WW-<ORG>.WRITE` minus `WW-`. Every portal names it differently, so there's no shared `ORGANIZATION`. |
-| `CATEGORY_DEV` / `CATEGORY_PROD` | `imicroseq_wastewater` / `imicroseq_environmental` | Portal category. The two portals name it differently (same dictionary). |
-| `UPLOAD_CSV` | `curated/PHAC-NWMP.dedup.csv` | What `etl.sh` writes, relative to the source folder |
-| `MAX_NEW` | `2000` | Size guard |
-| `ENABLED` | `1` | `0` = `run_weekly.sh` skips the source |
-
-`CATEGORY`, `MAX_NEW` and `ENABLED` can also be given per portal with a `_DEV` or `_PROD` suffix.
-The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a new source on dev only.
-`upload_workflow/load_source_conf.sh` applies these rules for every script.
-
-`./list_sources.sh` prints the whole mapping, every source on both portals.
-`./list_sources.sh --check` also logs in to each portal and shows whether its account can write to
-each organization:
-
-```
-SOURCE     ID           PORTAL ENABLED  ORGANIZATION         CATEGORY                  CAN_WRITE
-PHAC       PHAC-NWMP    dev    yes      PHAC-AUTOINGEST      imicroseq_wastewater      yes
-PHAC       PHAC-NWMP    prod   yes      PHAC-NWMP            imicroseq_environmental   yes
-```
-
-**`upload_workflow/.env`** (never committed): one login per portal, `devPortalUser` /
-`devPortalPass` and `prodPortalUser` / `prodPortalPass`, and `duoliauthtoken`, the Slack bot's
-OAuth token (only needed when `SLACK_CHANNEL` is set). `.env.example` shows the format.
-
-## Scheduling the weekly run
-
-Nothing is scheduled yet. Pick a day after the source's weekly update, and choose one of these:
-
-**Windows Task Scheduler** (recommended on this machine). It works without a WSL window open, as
-long as the PC is on. Find your distro name with `wsl.exe -l -v`, then run this from Windows
-(PowerShell or cmd):
-
-```
-schtasks /Create /TN "iMicroSeq weekly ingestion" /SC WEEKLY /D MON /ST 09:00 ^
-  /TR "wsl.exe -d <Distro> -- bash -lc '/mnt/d/OneDrive/ProjectIngestion/run_weekly.sh'"
-```
-
-**cron inside WSL.** This only fires while WSL is running. This WSL has no systemd, so the cron
-service has to be started after every WSL restart (`sudo service cron start`), unless systemd is
-enabled in `/etc/wsl.conf`. Step-by-step for operators: `SOP.md`, Procedure J.
-
-```
-0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
-```
-
-cron gives the script a bare environment (`PATH=/usr/bin:/bin`, no conda, working directory
-`$HOME`). This was tested with `env -i` and works. `runs/cron.log` only captures what the
-scheduler itself sees; each run's full log is in `runs/<stamp>/weekly.log`.
-
-`run_weekly.sh` activates the `ProjectIngestion` conda env by itself. It looks for `$CONDA_EXE`,
-falling back to `~/miniconda3/bin/conda`.
-
-## Dev and prod
-
-The portal is chosen per run: `--env dev|prod`, else `PORTAL_ENV` in `pipeline.conf` (`dev`). The
-bash scripts export it as `$PORTAL_ENV`, and every Python script reads it through
-`upload_workflow/portal_env.py`, the one place the hosts live. To run a Python script on its own
-against prod: `PORTAL_ENV=prod python upload_workflow/check_pending.py --organization …`.
-
-| | dev | prod |
-|---|---|---|
-| Website | `dev.virusseq-dataportal.ca` | `imicroseq-dataportal.ca` |
-| Submission service | `submission-service.dev.virusseq-dataportal.ca` | `submissions.imicroseq-dataportal.ca` |
-| Login | `ego.dev…` → `keycloak.dev…` | `ego.imicroseq-dataportal.ca` → `keycloak.imicroseq-dataportal.ca` |
-| Category | `imicroseq_wastewater` (id 3) | `imicroseq_environmental` (id 1) |
-| Dictionary | `imicroseq_wastewater` v1.17, 163 fields | identical (checked 2026-10-30) |
-| Account (`.env`) | `devPortalUser` / `devPortalPass` | `prodPortalUser` / `prodPortalPass` |
-| Date window | from 2026-09-01 | full history |
-| Review link | `https://dev.virusseq-dataportal.ca/submission/environmental/<id>` | `https://imicroseq-dataportal.ca/submission/environmental/<id>` |
-| PHAC organization | `PHAC-AUTOINGEST` | `PHAC-NWMP` |
-
-**Prod status (2026-11-03).** Nothing has been uploaded to prod by this pipeline.
-
-- **Permission:** the prod account has `WW-PHAC-NWMP.WRITE`.
-- **Blocked by an old empty submission:** submission 233 for `PHAC-NWMP` is open (status `OPEN`,
-  0 records, created 2026-07-14). Every prod run stops at the pending check until it's closed
-  (`./close_submission.sh PHAC --env prod`).
-- **First load:** a prod dry run finds all 51,224 PHAC records as new. That is over `MAX_NEW`, so
-  it needs `--force`. A single upload that size is untested and may need splitting into chunks.
-
-Commits stay manual on the website, in both portals. `runs/`, `msg.md` and the Slack channel are
-shared by both; the run log, `status.env` (`PORTAL_ENV`) and the `msg.md` headline say which portal
-a run used.
-
-## Known limitations
-
-- **Revised records are reported, not re-uploaded.** PHAC sometimes revises past weeks, often the
-  most recent one, which is usually partial. Those show up as "changed" FYIs. The portal has an
-  edit endpoint (`PUT /submission/category/{id}/data`) that could carry them later.
-- **First loads are a single upload.** That is fine for the dev window (~1.4k records), but the
-  prod first load (~51k) needs planning.
+- **The tool never publishes.** Committing is always done by a person on the website.
+- **`--dry-run` is always safe.** It does everything except the upload.
+- **Logins and data never go into git.** `upload_workflow/.env`, `runs/`, `msg.md` and the
+  downloaded data are excluded.
