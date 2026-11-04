@@ -52,8 +52,8 @@ folders under `data_ETL/`. PHAC (NWMP) is the first one.
 
 ```
 docs/                  SOPs (weekly upload, new source) + technical guides (how a run works, configuration)
-run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
-run_source.sh          one source: pending check -> ETL -> date window -> snapshot -> diff -> guard -> upload+validate
+run_weekly_update.sh   scheduler entry point: every enabled source, then one msg.md
+run_initial_upload.sh  one source: pending check -> ETL -> window -> snapshot -> diff -> guard -> upload (--chunk: first loads)
 close_submission.sh    discard a source's open submission (asks for its number) so a new one can start
 list_sources.sh        each source's organization/category per portal; --check logs in and checks WRITE
 pipeline.conf          PORTAL_ENV (default portal), DEV_/PROD_MIN_START_DATE, DEFAULT_MAX_NEW, SLACK_CHANNEL
@@ -87,10 +87,11 @@ exists, the run stops before doing any work and reminds the person to commit or 
 
 ```bash
 conda activate ProjectIngestion
-./run_source.sh PHAC --dry-run      # safe: everything except the upload
-./run_weekly.sh --dry-run
-./run_weekly.sh --env prod --dry-run   # the same against prod (reads only)
-bash data_ETL/PHAC/etl.sh           # ETL only
+./run_initial_upload.sh PHAC --dry-run          # safe: everything except the upload
+./run_weekly_update.sh --dry-run
+./run_weekly_update.sh --env prod --dry-run     # the same against prod (reads only)
+./run_initial_upload.sh PHAC --env prod --chunk # first load in chunks (asks before each)
+bash data_ETL/PHAC/etl.sh                       # ETL only
 ```
 
 ## Portal gotchas (Overture Lyric 0.3.0, dev and prod)
@@ -119,8 +120,7 @@ bash data_ETL/PHAC/etl.sh           # ETL only
 
 ## Prod: what's still open
 
-- Submission 233 (`PHAC-NWMP`, prod) is an old empty `OPEN` submission from 2026-07-14. It
-  blocks prod runs until the owner closes it (or OKs closing it).
-- The first prod load is the full history (51,224 PHAC records). That's over `MAX_NEW`, so it
-  needs `--force`, and may need chunked uploads. It's untested.
+- The first prod load is the full history (51,224 PHAC records): use
+  `./run_initial_upload.sh PHAC --env prod --chunk` (6 chunks of up to 10,000, one submission each,
+  confirmed and committed one by one). The chunk loop is tested only with stand-in portal scripts.
 - Commits stay manual on the website.

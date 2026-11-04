@@ -1,6 +1,6 @@
 # Data sources (ETL)
 
-Each folder here is one data source. The pipeline (`run_source.sh` / `run_weekly.sh`) doesn't know
+Each folder here is one data source. The pipeline (`run_initial_upload.sh` / `run_weekly_update.sh`) doesn't know
 anything source-specific: it runs the folder's `etl.sh` and takes the CSV it produces. Everything
 after that (date window, portal snapshot, diff, upload, notification) is the same for every
 source.
@@ -46,7 +46,7 @@ picked up and shown in `msg.md` as "values the parser could not resolve".
 | `CATEGORY` | Portal category. The portals name it differently, so set `CATEGORY_DEV="imicroseq_wastewater"` and `CATEGORY_PROD="imicroseq_environmental"`. |
 | `UPLOAD_CSV` | Path of the CSV `etl.sh` writes, relative to the source folder |
 | `MAX_NEW` | Size guard: a run finding more new records than this stops without uploading (unless `--force`) |
-| `ENABLED` | `1` = `run_weekly.sh` runs it, `0` = skipped |
+| `ENABLED` | `1` = `run_weekly_update.sh` runs it, `0` = skipped |
 
 `CATEGORY`, `MAX_NEW` and `ENABLED` can also be set per portal with a `_DEV` or `_PROD` suffix. The
 suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a source on dev only. See every

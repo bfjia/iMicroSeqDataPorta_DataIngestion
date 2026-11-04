@@ -35,9 +35,9 @@ conda env create -f environment.yaml                    # once
 cp upload_workflow/.env.example upload_workflow/.env    # once, then fill in the logins
 conda activate ProjectIngestion
 
-./run_weekly.sh --dry-run    # see what would be uploaded; uploads nothing
-./run_weekly.sh              # upload and check the new records
-cat msg.md                   # what happened, and what to do next
+./run_weekly_update.sh --dry-run    # see what would be uploaded; uploads nothing
+./run_weekly_update.sh              # upload and check the new records
+cat msg.md                          # what happened, and what to do next
 ```
 
 Then review and commit the upload on the website, using the link in `msg.md`. The full routine is
@@ -58,16 +58,16 @@ Step-by-step detail is in [docs/how_a_run_works.md](docs/how_a_run_works.md).
 ## Folder layout
 
 ```
-docs/                  procedures (SOPs) and technical guides
-data_ETL/              one folder per data source (PHAC, plus _template to copy)
-upload_workflow/       the scripts that talk to the portal
-data_specification/    the iMicroSeq standard: fields and allowed values
-run_weekly.sh          run every source (what the schedule runs)
-run_source.sh          run one source
-close_submission.sh    throw away an uncommitted upload, to start over
-list_sources.sh        each source's organization on dev and prod
-pipeline.conf          settings shared by all sources
-runs/                  logs from each run (not saved to git)
+docs/                    procedures (SOPs) and technical guides
+data_ETL/                one folder per data source (PHAC, plus _template to copy)
+upload_workflow/         the scripts that talk to the portal
+data_specification/      the iMicroSeq standard: fields and allowed values
+run_weekly_update.sh     the weekly update: every source (what the schedule runs)
+run_initial_upload.sh    one source: its first load (--chunk for big ones), or a one-off run
+close_submission.sh      throw away an uncommitted upload, to start over
+list_sources.sh          each source's organization on dev and prod
+pipeline.conf            settings shared by all sources
+runs/                    logs from each run (not saved to git)
 ```
 
 ## Ground rules

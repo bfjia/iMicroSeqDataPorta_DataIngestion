@@ -102,5 +102,5 @@ the row with a non-blank `geo loc name (site)` and preserves the original order.
 - **Dev window.** Dev only receives weeks from `DEV_MIN_START_DATE` (2026-09-01) on. That is
   1,437 records (7 weeks) in the 2026-10-30 feed.
 - **Prod gets the full history** (`PROD_MIN_START_DATE` is empty): 51,224 records in the
-  2026-10-30 feed. Nothing has been uploaded to prod yet. The first load is over the 2,000 size
-  guard, and an old empty submission (233) has to be closed first.
+  2026-10-30 feed. Nothing has been uploaded to prod yet. The first load goes up with `--chunk`
+  (6 chunks of up to 10,000).

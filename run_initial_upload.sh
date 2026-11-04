@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 #
-# Run one data source end to end:
+# Upload ONE data source end to end. Use it for a source's first (initial)
+# load, with --chunk when it's big, and for one-off runs of a single source.
+# run_weekly_update.sh calls it for every enabled source each week.
 #
 #   1 pending check   stop if a submission for the org is still open (before any work)
 #   2 ETL             data_ETL/<SOURCE>/etl.sh -> upload-ready CSV
@@ -17,9 +19,10 @@
 #
 # The portal is dev or prod: --env, else PORTAL_ENV in pipeline.conf.
 #
-#   ./run_source.sh PHAC
-#   ./run_source.sh PHAC --env prod --dry-run
-#   ./run_source.sh PHAC --holdout-weeks 1 --keep-work
+#   ./run_initial_upload.sh PHAC
+#   ./run_initial_upload.sh PHAC --env prod --dry-run
+#   ./run_initial_upload.sh PHAC --holdout-weeks 1 --keep-work
+#   ./run_initial_upload.sh PHAC --env prod --chunk      first load, 10,000 at a time
 
 set -euo pipefail
 
@@ -29,7 +32,7 @@ ENV_NAME="ProjectIngestion"
 
 usage() {
     cat <<'EOF'
-Usage: ./run_source.sh <SOURCE> [options]
+Usage: ./run_initial_upload.sh <SOURCE> [options]
 
   <SOURCE>              folder name under data_ETL/, e.g. PHAC
 
@@ -40,6 +43,10 @@ Options:
   --holdout-weeks N     TEST ONLY: hold back the newest N weeks of new records
   --holdout-random N    TEST ONLY: also hold back N random older new records
   --keep-work           keep the bulky intermediate files in runs/
+  --chunk               FIRST LOADS: upload in chunks of CHUNK_SIZE (pipeline.conf,
+                        10,000), one submission each. Asks before every chunk;
+                        the previous chunk must be committed on the website
+                        first. Needs a terminal. Not limited by MAX_NEW.
   -h, --help            show this help
 
 Uploads and validates only. Nothing is published until a person commits the
@@ -55,6 +62,7 @@ FORCE=0
 HOLDOUT_WEEKS=0
 HOLDOUT_RANDOM=0
 KEEP_WORK=0
+CHUNK=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --env)            [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; ENV_ARG="$2"; shift ;;
@@ -63,6 +71,7 @@ while [[ $# -gt 0 ]]; do
         --holdout-weeks)  [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; HOLDOUT_WEEKS="$2"; shift ;;
         --holdout-random) [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; HOLDOUT_RANDOM="$2"; shift ;;
         --keep-work)      KEEP_WORK=1 ;;
+        --chunk)          CHUNK=1 ;;
         -h|--help)        usage; exit 0 ;;
         -*)               echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
         *)
@@ -89,6 +98,7 @@ PORTAL_ENV="dev"
 DEV_MIN_START_DATE=""
 PROD_MIN_START_DATE=""
 DEFAULT_MAX_NEW=2000
+CHUNK_SIZE=10000
 SLACK_CHANNEL=""
 # shellcheck source=pipeline.conf
 source "${REPO_DIR}/pipeline.conf"
@@ -111,6 +121,15 @@ MAX_NEW="${MAX_NEW:-${DEFAULT_MAX_NEW}}"
 cutoffVar="${ENV_UPPER}_MIN_START_DATE"
 CUTOFF="${!cutoffVar:-}"
 
+if [[ "${CHUNK}" -eq 1 ]]; then
+    [[ "${CHUNK_SIZE}" =~ ^[1-9][0-9]*$ ]] \
+        || { echo "ERROR: CHUNK_SIZE in pipeline.conf must be a whole number (got '${CHUNK_SIZE}')" >&2; exit 2; }
+    if [[ "${DRY_RUN}" -eq 0 && ! -t 0 ]]; then
+        echo "ERROR: --chunk asks before every chunk, so it has to be run from a terminal" >&2
+        exit 2
+    fi
+fi
+
 # --- Conda environment ---------------------------------------------------
 activateEnv() {
     [[ "${CONDA_DEFAULT_ENV:-}" == "${ENV_NAME}" ]] && return 0
@@ -130,7 +149,7 @@ activateEnv() {
 activateEnv
 
 # --- Run folder, lock, log ----------------------------------------------
-# run_weekly.sh sets INGEST_RUN_DIR and already holds the lock. Run on its own,
+# run_weekly_update.sh sets INGEST_RUN_DIR and already holds the lock. Run on its own,
 # this script takes the lock and writes its own msg.md.
 STANDALONE=0
 if [[ -z "${INGEST_RUN_DIR:-}" ]]; then
@@ -176,14 +195,14 @@ onExit() {
         setStatus STEP "${STEP}"
     fi
     if [[ "${KEEP_WORK}" -eq 0 ]]; then
-        rm -rf "${OUT}/in_scope.csv" "${OUT}/published.csv" "${OUT}/submit"
+        rm -rf "${OUT}/in_scope.csv" "${OUT}/published.csv" "${OUT}/submit" "${OUT}/chunks"
     fi
     echo "== ${SOURCE_ID}: finished with status '$(grep '^STATUS=' "${STATUS_FILE}" | tail -n1 | cut -d= -f2)' (log: ${LOG#"${REPO_DIR}"/})"
     if [[ "${STANDALONE}" -eq 1 ]]; then
         python "${UPLOAD_DIR}/notify.py" --run-dir "${INGEST_RUN_DIR}" \
             --out "${INGEST_RUN_DIR}/msg.md" --copy-to "${REPO_DIR}/msg.md" > /dev/null \
             && echo "== Notification written to msg.md"
-        # Slack: once per run, never for a dry run (run_weekly.sh does the same)
+        # Slack: once per run, never for a dry run (run_weekly_update.sh does the same)
         if [[ -n "${SLACK_CHANNEL}" && "${DRY_RUN}" -eq 0 ]]; then
             python "${UPLOAD_DIR}/slack_post.py" --file "${INGEST_RUN_DIR}/msg.md" \
                 --channel "${SLACK_CHANNEL}" \
@@ -206,6 +225,7 @@ echo "== ${SOURCE_ID}: run started $(date '+%Y-%m-%d %H:%M:%S') on ${ENV_UPPER}"
 echo "   portal ${PORTAL_ENV}, organization ${ORGANIZATION}, category ${CATEGORY}, date window from ${CUTOFF:-the beginning}"
 (( HOLDOUT_WEEKS + HOLDOUT_RANDOM > 0 )) && echo "   TEST MODE: holding back records (--holdout-*)"
 (( DRY_RUN )) && echo "   DRY RUN: every step except the upload"
+(( CHUNK )) && echo "   CHUNKED: up to ${CHUNK_SIZE} records per submission, confirmed one at a time"
 
 # --- 1. Pending check, before any actual work ---------------------------
 STEP="login"
@@ -318,12 +338,27 @@ if [[ "${NEW}" -eq 0 ]]; then
     echo "[6/7] Nothing new to upload."
     finish nothing_new 0
 fi
-if [[ "${NEW}" -gt "${MAX_NEW}" && "${FORCE}" -eq 0 ]]; then
+if [[ "${CHUNK}" -eq 1 ]]; then
+    # Chunks are confirmed one by one by a person, so MAX_NEW doesn't apply.
+    STEP="chunk split"
+    CHUNK_DIR="${OUT}/chunks"
+    CHUNK_OUT="$(python "${UPLOAD_DIR}/chunk_rows.py" --input "${OUT}/delta.csv" \
+        --size "${CHUNK_SIZE}" --out-dir "${CHUNK_DIR}")"
+    CHUNK_LINES=(); while IFS= read -r line; do [[ "${line}" == chunk=* ]] && CHUNK_LINES+=("${line}"); done <<< "${CHUNK_OUT}"
+    CHUNK_COUNT="$(kv chunks "$(tail -n1 <<< "${CHUNK_OUT}")")"
+    setStatus CHUNK_TOTAL "${CHUNK_COUNT}"
+    setStatus CHUNK_SIZE "${CHUNK_SIZE}"
+    echo "[6/7] ${NEW} new record(s) in ${CHUNK_COUNT} chunk(s) of up to ${CHUNK_SIZE}, oldest first:"
+    for line in "${CHUNK_LINES[@]}"; do
+        echo "        chunk $(kv chunk "${line}"): $(kv rows "${line}") records, weeks $(kv first "${line}") to $(kv last "${line}")"
+    done
+elif [[ "${NEW}" -gt "${MAX_NEW}" && "${FORCE}" -eq 0 ]]; then
     echo "[6/7] STOP: ${NEW} new records is more than MAX_NEW=${MAX_NEW}. Nothing uploaded."
-    echo "      If this is expected (e.g. a first load), re-run with --force."
+    echo "      If this is expected (e.g. a first load), re-run with --force, or --chunk."
     finish guard 1
+else
+    echo "[6/7] ${NEW} new record(s) to upload$([[ "${FORCE}" -eq 1 && "${NEW}" -gt "${MAX_NEW}" ]] && echo " (over MAX_NEW, allowed by --force)")"
 fi
-echo "[6/7] ${NEW} new record(s) to upload$([[ "${FORCE}" -eq 1 && "${NEW}" -gt "${MAX_NEW}" ]] && echo " (over MAX_NEW, allowed by --force)")"
 
 if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "[7/7] DRY RUN: stopping before the upload. Nothing was sent to the portal."
@@ -332,30 +367,114 @@ if [[ "${DRY_RUN}" -eq 1 ]]; then
 fi
 
 # --- 7. Upload + validate (never commits) --------------------------------
-STEP="upload and validation"
-echo "[7/7] Uploading and validating (this never publishes)"
-rm -f "${OUT}/result.json"
-set +e
-python "${UPLOAD_DIR}/main.py" --input "${OUT}/delta.csv" --organization "${ORGANIZATION}" \
-    --category "${CATEGORY}" --work-dir "${OUT}/submit" --result-json "${OUT}/result.json"
-MAIN_RC=$?
-set -e
-[[ -f "${OUT}/result.json" ]] || fail "The upload stopped before validation finished (main.py exit ${MAIN_RC}); see the log."
-
-read -r RESULT_ID RESULT_STATUS RESULT_URL RESULT_ERRORS < <(python -c '
+# uploadOne <csv> <work dir> <timeout seconds>
+# Uploads one file as a new submission and waits for validation. Sets
+# RESULT_ID, RESULT_STATUS, RESULT_URL and RESULT_ERRORS.
+uploadOne() {
+    rm -f "${OUT}/result.json"
+    set +e
+    python "${UPLOAD_DIR}/main.py" --input "$1" --organization "${ORGANIZATION}" \
+        --category "${CATEGORY}" --work-dir "$2" --result-json "${OUT}/result.json" --timeout "$3"
+    MAIN_RC=$?
+    set -e
+    [[ -f "${OUT}/result.json" ]] || fail "The upload stopped before validation finished (main.py exit ${MAIN_RC}); see the log."
+    read -r RESULT_ID RESULT_STATUS RESULT_URL RESULT_ERRORS < <(python -c '
 import json, sys
 d = json.load(open(sys.argv[1]))
 print(d.get("submissionId") or "-", d.get("status") or "-", d.get("url") or "-",
       d.get("errors") if d.get("errors") is not None else "-")
 ' "${OUT}/result.json")
-setStatus SUBMISSION_ID "${RESULT_ID}"
-setStatus SUBMISSION_URL "${RESULT_URL}"
-setStatus ERRORS "${RESULT_ERRORS}"
+    setStatus SUBMISSION_ID "${RESULT_ID}"
+    setStatus SUBMISSION_URL "${RESULT_URL}"
+    setStatus ERRORS "${RESULT_ERRORS}"
+    case "${RESULT_STATUS}" in
+        VALID)   ;;
+        INVALID) finish invalid 1 ;;
+        BLOCKED_BY_OPEN_SUBMISSION)
+            fail "A submission (${RESULT_ID}) was opened for ${ORGANIZATION} while this run was working; nothing was uploaded." ;;
+        *)       fail "Validation ended with status ${RESULT_STATUS}." ;;
+    esac
+}
 
-case "${RESULT_STATUS}" in
-    VALID)   finish review 0 ;;
-    INVALID) finish invalid 1 ;;
-    BLOCKED_BY_OPEN_SUBMISSION)
-        fail "A submission (${RESULT_ID}) was opened for ${ORGANIZATION} while this run was working; nothing was uploaded." ;;
-    *)       fail "Validation ended with status ${RESULT_STATUS}." ;;
-esac
+if [[ "${CHUNK}" -eq 0 ]]; then
+    STEP="upload and validation"
+    echo "[7/7] Uploading and validating (this never publishes)"
+    uploadOne "${OUT}/delta.csv" "${OUT}/submit" 600
+    finish review 0
+fi
+
+# --- 7 (chunked). One submission per chunk, a person confirms each ---------
+freshToken() {   # tokens expire (3 h on dev), and a chunked load can take longer
+    PORTAL_TOKEN="$(python "${UPLOAD_DIR}/step1_token.py")" \
+        || fail "Could not log in to the ${PORTAL_ENV} portal again."
+    export PORTAL_TOKEN
+}
+openSubmission() {   # sets OPEN_ID / OPEN_STATUS (empty = nothing open). Never in $(...):
+    local out key value  # a failed check must stop the run, not read as "nothing open"
+    OPEN_ID=""; OPEN_STATUS=""
+    out="$(python "${UPLOAD_DIR}/check_pending.py" --category "${CATEGORY}" --organization "${ORGANIZATION}")" \
+        || fail "Could not check the portal for open submissions, so stopped rather than risk a duplicate upload."
+    while IFS='=' read -r key value; do
+        case "${key}" in PENDING_ID) OPEN_ID="${value}" ;; PENDING_STATUS) OPEN_STATUS="${value}" ;; esac
+    done <<< "${out}"
+}
+stopChunks() {   # stopChunks <chunks uploaded so far>
+    echo "      Stopped. ${1} of ${CHUNK_COUNT} chunk(s) uploaded; run again with --chunk to continue."
+    freshToken
+    if [[ "$1" -gt 0 ]]; then
+        openSubmission
+        if [[ -n "${OPEN_ID}" ]]; then finish review 0; fi   # the last chunk still waits for its commit
+    fi
+    finish paused 0
+}
+
+STEP="chunked upload"
+echo "[7/7] Chunked upload to the ${PORTAL_ENV} portal: ${CHUNK_COUNT} submission(s), one at a time (this never publishes)"
+LEFT="${NEW}"
+setStatus CHUNK_DONE 0
+setStatus CHUNK_LEFT "${LEFT}"
+for ((i = 1; i <= CHUNK_COUNT; i++)); do
+    line="${CHUNK_LINES[$((i - 1))]}"
+    rows="$(kv rows "${line}")"; first="$(kv first "${line}")"; last="$(kv last "${line}")"
+    while true; do
+        echo
+        if (( i > 1 )); then
+            echo "      Chunk $((i - 1)) is submission ${RESULT_ID}. Commit it on the website before the next one:"
+            echo "        ${RESULT_URL}"
+        fi
+        printf '      Upload chunk %s of %s (%s records, weeks %s to %s)? Type yes, or stop: ' \
+            "${i}" "${CHUNK_COUNT}" "${rows}" "${first}" "${last}"
+        answer=""
+        read -r answer || answer="stop"
+        echo
+        case "${answer,,}" in
+            yes)
+                freshToken
+                if (( i > 1 )); then
+                    openSubmission
+                    if [[ -n "${OPEN_ID}" ]]; then
+                        echo "      Submission ${OPEN_ID} is still open (${OPEN_STATUS}). Commit it on the website first."
+                        continue
+                    fi
+                fi
+                break ;;
+            stop) stopChunks $((i - 1)) ;;
+            *)    echo "      Please type yes or stop." ;;
+        esac
+    done
+
+    echo "      --- chunk ${i} of ${CHUNK_COUNT}: ${rows} records, weeks ${first} to ${last}"
+    setStatus CHUNK_NUMBER "${i}"
+    setStatus CHUNK_ROWS "${rows}"
+    setStatus CHUNK_FIRST "${first}"
+    setStatus CHUNK_LAST "${last}"
+    uploadOne "$(kv file "${line}")" "${OUT}/submit/chunk_${i}" 3600
+    LEFT=$((LEFT - rows))
+    setStatus CHUNK_DONE "${i}"
+    setStatus CHUNK_LEFT "${LEFT}"
+    echo "      Chunk ${i} of ${CHUNK_COUNT} is VALID: submission ${RESULT_ID}. ${LEFT} record(s) left to upload."
+done
+echo
+echo "      All ${CHUNK_COUNT} chunk(s) uploaded. Commit the last one on the website:"
+echo "        ${RESULT_URL}"
+finish review 0

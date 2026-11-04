@@ -1,7 +1,7 @@
 """Keep only rows whose collection week starts on or after a cutoff date.
 
 Dev does not need every source's full history, so pipeline.conf sets
-DEV_MIN_START_DATE and run_source.sh applies it right after the ETL. Rows are
+DEV_MIN_START_DATE and run_initial_upload.sh applies it right after the ETL. Rows are
 kept when ``sample collection start date`` (YYYY-MM-DD) is on or after the
 cutoff. While a cutoff is set, rows with a blank or malformed date are dropped
 too, since they cannot be placed in the window. With an empty cutoff every row

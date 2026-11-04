@@ -1,4 +1,4 @@
-# Shared by run_source.sh, run_weekly.sh, close_submission.sh and list_sources.sh.
+# Shared by run_initial_upload.sh, run_weekly_update.sh, close_submission.sh and list_sources.sh.
 # Source this file, then call:
 #
 #   loadSourceConf <source folder> <dev|prod>

@@ -1,6 +1,6 @@
 # Upload workflow
 
-Scripts that talk to the data portal, plus the generic helpers `run_source.sh` uses between the
+Scripts that talk to the data portal, plus the generic helpers `run_initial_upload.sh` uses between the
 ETL and the upload. Each portal stage is its own script, so it can be run, debugged or replaced on
 its own. `main.py` chains the upload stages together.
 
@@ -62,7 +62,7 @@ them from anywhere with the `ProjectIngestion` env active, e.g.
 `--replace` discards that submission first; use it only when re-uploading after fixing an INVALID
 submission. Without `--work-dir`, its working files go in `runs/main-<timestamp>/`, never `/tmp`.
 
-### Pipeline helpers (used by `run_source.sh`)
+### Pipeline helpers (used by `run_initial_upload.sh`)
 
 | Script | Step | What it does | Example |
 |---|---|---|---|
@@ -73,6 +73,7 @@ submission. Without `--work-dir`, its working files go in `runs/main-<timestamp>
 | `holdout_rows.py` | 5 | **Test only.** Holds back the newest N weeks plus N random older rows, to create a delta for the next run | `python holdout_rows.py --input delta.csv --output kept.csv --held-out held.csv --latest-weeks 1 --random 10` |
 | `close_submission.py` | — | Discards the org's open submission so a new one can start (used by `../close_submission.sh`). Shows it, then asks for its number unless `--yes`. Re-checks that it's gone. Never touches published records. | `python close_submission.py --organization PHAC-AUTOINGEST` |
 | `load_source_conf.sh` | — | Bash, sourced by the run scripts and `../list_sources.sh`. `loadSourceConf <dir> <dev\|prod>` reads a `source.conf` for one portal: `ORGANIZATION_<ENV>` (required), plus `_DEV`/`_PROD` overrides for `CATEGORY`, `MAX_NEW`, `ENABLED`. `checkSourceConf` reports what's missing. | `source load_source_conf.sh; loadSourceConf ../data_ETL/PHAC prod` |
+| `chunk_rows.py` | 6 | `--chunk` only: sorts the new records oldest first and cuts them into `chunk_NN.csv` files of at most `--size` rows. Prints `chunk=N rows= first= last= file=` lines and `chunks= rows=`. | `python chunk_rows.py --input delta.csv --size 10000 --out-dir chunks/` |
 | `notify.py` | 8 | Builds the run's single `msg.md` digest from each source's `status.env` | `python notify.py --run-dir runs/<stamp> --out msg.md` |
 | `slack_post.py` | 8 | Posts `msg.md` to Slack (`chat.postMessage`) after converting it to Slack markdown. Token: `duoliauthtoken` in `.env`; the bot must be in the channel. `--print` shows the text and sends nothing. Modeled on `old/duoli.py`. | `python slack_post.py --file ../msg.md --channel C0123456789` |
 

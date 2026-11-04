@@ -1,6 +1,6 @@
 """Pre-flight check: is a submission for this organization still open?
 
-This is the first thing run_source.sh does, before downloading or parsing
+This is the first thing run_initial_upload.sh does, before downloading or parsing
 anything. Commits happen on the portal website, by a person, so last week's
 upload may still be waiting: VALID and waiting to be committed, or INVALID and
 waiting to be fixed. Uploading on top of it would append to it and duplicate

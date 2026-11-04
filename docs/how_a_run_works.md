@@ -9,7 +9,7 @@ writes, the portal calls, and how each step can end. For the weekly routine in p
 
 ```mermaid
 flowchart TD
-    W([run_weekly.sh]) -->|each enabled source| S([run_source.sh SOURCE])
+    W([run_weekly_update.sh]) -->|each enabled source| S([run_initial_upload.sh SOURCE])
     S --> P1["1. Pending check<br/>login, then: is a submission still open?"]
     P1 -->|"yes"| STOPW([stop: remind to commit / fix])
     P1 -->|"no"| P2["2. ETL<br/>data_ETL/SOURCE/etl.sh"]
@@ -102,7 +102,8 @@ stops. It never assumes nothing is pending.
 |---|---|
 | **What** | Stops when there is nothing new (`nothing_new`, 🟢). It also stops when the new count is above `MAX_NEW` (2,000; a normal PHAC week is ~150–300), unless `--force` is given (`guard`, 🔴). |
 | **Why** | A sudden jump usually means the source changed how its IDs are built. Uploading would re-publish old data under new IDs. Use `--force` for an expected large batch, like a first load. |
-| **Dry run** | With `--dry-run`, the run stops here (`dry_run`, 🟢) and `delta.csv` shows what would have been uploaded. |
+| **Chunked** | With `--chunk`, `MAX_NEW` doesn't apply, because a person confirms every chunk. `upload_workflow/chunk_rows.py` sorts `delta.csv` (after any hold-back) oldest first and cuts it into `chunks/chunk_NN.csv` of at most `CHUNK_SIZE` rows. The log lists each chunk's size and weeks. |
+| **Dry run** | With `--dry-run`, the run stops here (`dry_run`, 🟢) and `delta.csv` shows what would have been uploaded (with `--chunk`, also the chunk plan). |
 
 ### Step 7: Upload and validate (never commits)
 
@@ -113,10 +114,11 @@ stops. It never assumes nothing is pending.
 | **Portal calls** | `GET /category/{id}`, `GET /dictionary/category/{id}`, `GET /submission/category/{id}?onlyActive=true`, `POST /submission/category/{id}/data`, `GET /submission/{id}` (polled; an event stream) |
 | **Output** | `submit/sample.csv` (renamed copy, deleted after the run) and `result.json` (`submissionId`, `status`, `url`, `rows`, `errors`) |
 | **Ends as** | `review` (🟡 VALID: a person reviews and commits on the website), `invalid` (🔴 see the errors at the link) |
+| **Chunked** | With `--chunk`, each chunk is its own submission, uploaded the same way. Before each one the script asks `yes` / `stop`. From chunk 2 on it logs in again and checks that the previous submission is no longer open, i.e. committed. If it is still open, it asks again. Validation may take up to an hour per chunk. `stop` ends as `review` if the last chunk still waits for its commit, else `paused` (🟡). A failed chunk ends as `invalid`. Running `--chunk` again resumes, since committed chunks are no longer new. `status.env` records `CHUNK_TOTAL`, `CHUNK_DONE`, `CHUNK_LEFT` and the current chunk's rows and weeks. |
 
 ### Step 8: Notification (`msg.md`)
 
-`run_source.sh` records its outcome in `status.env`. `upload_workflow/notify.py` turns all of a
+`run_initial_upload.sh` records its outcome in `status.env`. `upload_workflow/notify.py` turns all of a
 run's `status.env` files into **one** Markdown digest. It is written to `msg.md` in the repo root
 (overwritten each run) and to `runs/<stamp>/msg.md`. Then `upload_workflow/slack_post.py` posts
 it to Slack (see below).
@@ -147,9 +149,10 @@ it to Slack (see below).
 | `failed` | 🔴 | A step errored. The message says which, with the last log lines. |
 | `nothing_new` | 🟢 | Everything is already published |
 | `dry_run` | 🟢 | `--dry-run`: nothing uploaded; `delta.csv` shows what would be |
+| `paused` | 🟡 | `--chunk` stopped between chunks; the rest is uploaded by running `--chunk` again |
 
 **Slack.** When `SLACK_CHANNEL` is set in `pipeline.conf`, the same digest is posted to that
-channel, once per run, by `run_weekly.sh` (or by `run_source.sh` run on its own). Dry runs never
+channel, once per run, by `run_weekly_update.sh` (or by `run_initial_upload.sh` run on its own). Dry runs never
 post.
 
 - **How it posts:** `slack_post.py` is modeled on `old/duoli.py`. It uses the bot's OAuth token
@@ -175,7 +178,7 @@ post.
 | `changed.csv` | yes | already-published records whose values changed at the source |
 | `heldout.csv` | yes | test hold-back rows (only with `--holdout-*`) |
 | `result.json` | yes | upload outcome (only if an upload happened) |
-| `in_scope.csv`, `published.csv`, `submit/` | `--keep-work` only | bulky intermediates |
+| `in_scope.csv`, `published.csv`, `submit/`, `chunks/` | `--keep-work` only | bulky intermediates (`chunks/` only with `--chunk`) |
 
 `runs/<stamp>/msg.md` is that run's digest, and `runs/<stamp>/weekly.log` is the weekly runner's
 log.
@@ -185,5 +188,6 @@ log.
 - **Revised records are reported, not re-uploaded.** PHAC sometimes revises past weeks, often the
   most recent one, which is usually partial. Those show up as "changed" FYIs. The portal has an
   edit endpoint (`PUT /submission/category/{id}/data`) that could carry them later.
-- **First loads are a single upload.** That is fine for the dev window (~1.4k records), but the
-  prod first load (~51k) needs planning.
+- **Big first loads go up in chunks** (`--chunk`, 10,000 per submission, each committed before the
+  next). The chunk loop has been tested with stand-in portal scripts, not yet against a real
+  portal.

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
 # Weekly entry point -- point the scheduler (Windows Task Scheduler or cron)
-# at this script. It runs run_source.sh for every enabled source under
+# at this script. It runs run_initial_upload.sh for every enabled source under
 # data_ETL/ and then writes ONE notification digest, msg.md.
 #
-#   ./run_weekly.sh                    normal run (what the scheduler calls)
-#   ./run_weekly.sh --dry-run          every step except the upload, for checking
-#   ./run_weekly.sh --env prod [...]   use the prod portal (default: PORTAL_ENV
-#                                      in pipeline.conf)
+#   ./run_weekly_update.sh                    normal run (what the scheduler calls)
+#   ./run_weekly_update.sh --dry-run          every step except the upload, for checking
+#   ./run_weekly_update.sh --env prod [...]   use the prod portal (default: PORTAL_ENV
+#                                             in pipeline.conf)
 #
 # * Folders under data_ETL/ starting with "_" (the template) are skipped, as
 #   are sources whose source.conf says ENABLED=0 (or ENABLED_DEV / _PROD=0).
@@ -101,7 +101,7 @@ for dir in "${REPO_DIR}"/data_ETL/*/; do
     echo
     echo "################ ${name} ################"
     RAN=$((RAN + 1))
-    if ! "${REPO_DIR}/run_source.sh" "${name}" ${SOURCE_ARGS[@]+"${SOURCE_ARGS[@]}"}; then
+    if ! "${REPO_DIR}/run_initial_upload.sh" "${name}" ${SOURCE_ARGS[@]+"${SOURCE_ARGS[@]}"}; then
         ANY_PROBLEM=1
     fi
 done

@@ -32,7 +32,7 @@ week to week is a separate procedure: [SOP_weekly_upload.md](SOP_weekly_upload.m
 
   | Name | What it's for | Example (PHAC) |
   |---|---|---|
-  | Folder name | Used in every command, e.g. `./run_source.sh PHAC`. Short, no spaces, not starting with `_`. | `PHAC` |
+  | Folder name | Used in every command, e.g. `./run_initial_upload.sh PHAC`. Short, no spaces, not starting with `_`. | `PHAC` |
   | `SOURCE_ID` | Names the run folders and the source in messages | `PHAC-NWMP` |
   | Organization, per portal | Who the records are submitted as. **Each portal names it differently.** Agree the names with the portal administrators. | dev `PHAC-AUTOINGEST`, prod `PHAC-NWMP` |
 
@@ -235,7 +235,7 @@ It should finish without an error and write the `UPLOAD_CSV` file. Then run thre
 ## Step 7. Dry run on dev
 
 ```bash
-./run_source.sh <NAME> --dry-run
+./run_initial_upload.sh <NAME> --dry-run
 cat msg.md
 ```
 
@@ -245,7 +245,7 @@ window (weeks from 2026-09-01), and the comparison with what's already published
 | `msg.md` says | Means | Do this |
 |---|---|---|
 | 🟢 *dry run: N new records … would be uploaded* | It works | Open the `delta.csv` it names and spot-check a few rows. Go to Step 8. |
-| 🔴 *stopped: N new records is over the limit* | More than `MAX_NEW`, which is normal for a first load | Run `./run_source.sh <NAME> --dry-run --force` to see the full count |
+| 🔴 *stopped: N new records is over the limit* | More than `MAX_NEW`, which is normal for a first load | Run `./run_initial_upload.sh <NAME> --dry-run --force` to see the full count |
 | 🔴 *run failed during ETL* | `etl.sh` stopped with an error | Open the `Log:` file, fix it, repeat Step 6 |
 | 🔴 *run failed during diff* | Duplicate sample IDs | Step 3 |
 | 🔴 *run failed during date window* | No records from 2026-09-01 on | Check the dates the converter writes in `sample collection start date` (YYYY-MM-DD) |
@@ -256,7 +256,7 @@ window (weeks from 2026-09-01), and the comparison with what's already published
 Agree it with the data owner first. Then:
 
 ```bash
-./run_source.sh <NAME> --force
+./run_initial_upload.sh <NAME> --force
 cat msg.md
 ```
 
@@ -281,7 +281,7 @@ published yet.
 
      ```bash
      ./close_submission.sh <NAME>
-     ./run_source.sh <NAME> --force
+     ./run_initial_upload.sh <NAME> --force
      ```
 
 ## Step 9. Confirm nothing is new
@@ -289,7 +289,7 @@ published yet.
 After the commit, run another dry run:
 
 ```bash
-./run_source.sh <NAME> --dry-run
+./run_initial_upload.sh <NAME> --dry-run
 ```
 
 It must say 🟢 *nothing new (N records checked)*. That proves the sample IDs are stable and the
@@ -309,33 +309,36 @@ ENABLED_PROD=0
 
 `ENABLED_PROD=0` keeps the source out of prod runs until Step 12. Check with
 `./list_sources.sh`: `ENABLED` should be `yes` for dev and `no` for prod. The weekly run
-(`./run_weekly.sh`) now includes the source.
+(`./run_weekly_update.sh`) now includes the source.
 
 ## Step 11. Prod: dry run and first load
 
 Prod has **no date window**, so it gets the source's full history.
 
-1. **Dry run.** Note how many records there are:
+1. **Dry run.** This shows how many records there are and how they'd be split into chunks of
+   10,000:
 
    ```bash
-   ./run_source.sh <NAME> --env prod --dry-run --force
+   ./run_initial_upload.sh <NAME> --env prod --chunk --dry-run
    cat msg.md
    ```
 
-   A first load of more than a few thousand records in one upload hasn't been tried yet. Plan
-   anything that size with the data team.
-2. **First load**, once the data owner agrees for prod:
+2. **First load**, once the data owner agrees for prod. Upload it in chunks. Each chunk is its own
+   submission, and the script asks before each one:
 
    ```bash
-   ./run_source.sh <NAME> --env prod --force
+   ./run_initial_upload.sh <NAME> --env prod --chunk
    ```
 
-3. **Review and commit it on the prod website** (`imicroseq-dataportal.ca`), as in
-   [SOP_weekly_upload.md](SOP_weekly_upload.md) Steps 3–4. **Committing on prod publishes the records for real.**
+   For a small source (under 2,000 records) `--force` instead of `--chunk` uploads it in one go.
+3. **Review and commit each chunk on the prod website** (`imicroseq-dataportal.ca`) before
+   typing `yes` for the next one. How the questions work is in
+   [SOP_weekly_upload.md](SOP_weekly_upload.md), Procedure C. **Committing on prod publishes the
+   records for real.**
 4. **Confirm nothing is new:**
 
    ```bash
-   ./run_source.sh <NAME> --env prod --dry-run
+   ./run_initial_upload.sh <NAME> --env prod --dry-run
    ```
 
    It must say 🟢 *nothing new*.

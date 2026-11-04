@@ -2,7 +2,7 @@
 #
 # PHAC ETL: download the NWMP feed, convert it to the iMicroSeq schema, and
 # remove duplicate sample IDs. Produces the file named by UPLOAD_CSV in
-# source.conf. Run by run_source.sh, or on its own (with the ProjectIngestion
+# source.conf. Run by run_initial_upload.sh, or on its own (with the ProjectIngestion
 # conda env active):
 #
 #     bash data_ETL/PHAC/etl.sh

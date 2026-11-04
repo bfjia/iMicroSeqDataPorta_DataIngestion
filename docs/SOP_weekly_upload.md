@@ -146,7 +146,7 @@ Use this when you don't want to wait for the weekly schedule.
 ```bash
 cd /mnt/d/OneDrive/ProjectIngestion
 conda activate ProjectIngestion
-./run_weekly.sh
+./run_weekly_update.sh
 ```
 
 It prints its progress as `[1/7]` to `[7/7]`. It takes about a minute. When it ends, go to the
@@ -155,7 +155,7 @@ weekly routine above, Step 1.
 **For the prod portal**, add `--env prod`:
 
 ```bash
-./run_weekly.sh --env prod
+./run_weekly_update.sh --env prod
 ```
 
 Don't do this until the data team has done the first prod load with you (Procedure C).
@@ -163,8 +163,8 @@ Don't do this until the data team has done the first prod load with you (Procedu
 ### Procedure B: check what would be uploaded, without uploading
 
 ```bash
-./run_weekly.sh --dry-run              # dev
-./run_weekly.sh --env prod --dry-run   # prod
+./run_weekly_update.sh --dry-run              # dev
+./run_weekly_update.sh --env prod --dry-run   # prod
 ```
 
 This does everything except the upload. `msg.md` then says 🟢 *dry run* and how many records
@@ -176,14 +176,37 @@ The data team usually does this one together with you. A first load is often big
 size limit, so it is run with `--force`:
 
 ```bash
-./run_source.sh PHAC --dry-run --force    # 1. check the numbers first
-./run_source.sh PHAC --force              # 2. upload and validate
+./run_initial_upload.sh PHAC --dry-run --force    # 1. check the numbers first
+./run_initial_upload.sh PHAC --force              # 2. upload and validate
 ```
 
-For prod, add `--env prod` to both commands. Prod gets the source's full history, which for PHAC
-is about 51,000 records, so plan the prod first load with the data team.
-
 Then do the weekly routine (Steps 1–4) to review and commit it.
+
+**A big first load (prod), in chunks.** Prod gets the source's full history, about 51,000 records
+for PHAC. That goes up in chunks of 10,000, each a separate submission that you commit before the
+next one is sent:
+
+```bash
+./run_initial_upload.sh PHAC --env prod --chunk --dry-run   # 1. see the chunks, uploads nothing
+./run_initial_upload.sh PHAC --env prod --chunk             # 2. upload, one chunk at a time
+```
+
+The script asks before every chunk:
+
+```
+      Upload chunk 2 of 6 (10000 records, weeks 2023-05-07 to 2024-03-10)? Type yes, or stop:
+```
+
+1. Type `yes` and press **Enter** to upload the chunk. Wait until it says the chunk is **VALID**
+   and shows its link.
+2. Open the link and **commit that submission on the website** (Steps 3–4).
+3. Back in the terminal, type `yes` for the next chunk. If you haven't committed the last one yet,
+   it tells you so and asks again.
+4. Repeat until it says *All chunks uploaded*, then commit the last one.
+
+You can type `stop` at any question. Nothing is lost: run the same command again later, and it
+carries on with whatever isn't published yet. If a chunk fails validation, the run stops; see
+Procedure E. Keep the terminal open while chunks upload.
 
 ### Procedure D: "still waiting for your commit" (🟡)
 
@@ -270,11 +293,11 @@ website afterwards (the weekly routine above).
 
    ```
    # iMicroSeq weekly ingestion: every Monday at 09:00
-   0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
+   0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly_update.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
    ```
 
    This runs against the portal set by `PORTAL_ENV` in `pipeline.conf` (dev). To schedule prod
-   instead, put `--env prod` right after `run_weekly.sh`.
+   instead, put `--env prod` right after `run_weekly_update.sh`.
 
    The five values at the start are *minute, hour, day of month, month, day of week*. `0 9 * * 1`
    means "at 09:00, every month, on Mondays" (0 = Sunday, 1 = Monday … 6 = Saturday). To run
@@ -308,7 +331,7 @@ end of the cron log:
 tail -n 20 /mnt/d/OneDrive/ProjectIngestion/runs/cron.log
 ```
 
-**To stop the schedule:** run `crontab -e` again, put a `#` at the start of the `run_weekly.sh`
+**To stop the schedule:** run `crontab -e` again, put a `#` at the start of the `run_weekly_update.sh`
 line (or delete both lines), and save.
 
 ### Procedure K: find a submission (for troubleshooting)

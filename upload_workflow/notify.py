@@ -1,6 +1,6 @@
 """Write the run's notification digest, msg.md (slack_post.py posts it to Slack).
 
-One message per run, never one per step. run_source.sh leaves a status.env in
+One message per run, never one per step. run_initial_upload.sh leaves a status.env in
 each source's run folder; this reads them all and writes a single Markdown
 digest:
 
@@ -38,6 +38,7 @@ Levels = {
     "waiting_invalid": "problem",
     "review": "action",
     "waiting": "action",
+    "paused": "action",
     "nothing_new": "ok",
     "dry_run": "ok",
 }
@@ -117,8 +118,28 @@ def section(s, folder):
     new = num(s.get("NEW"))
     delta = os.path.join(folder, "delta.csv")
     out = []
+    # Chunked first load (run_initial_upload.sh --chunk)
+    total = s.get("CHUNK_TOTAL", "")
+    done = s.get("CHUNK_DONE", "0")
+    left = s.get("CHUNK_LEFT", "0")
+    again = (f"`./run_initial_upload.sh {s.get('SOURCE_NAME', '<SOURCE>')} --env {s.get('PORTAL_ENV', 'dev')} "
+             "--chunk`")
+    chunkOf = f"chunk {s.get('CHUNK_NUMBER', done)} of {total}" if total else ""
+    closeCmd = (f"./close_submission.sh {s.get('SOURCE_NAME', '<SOURCE>')} "
+                f"--env {s.get('PORTAL_ENV', 'dev')}")
 
-    if status == "review":
+    if status == "review" and total:
+        first, last = s.get("CHUNK_FIRST", ""), s.get("CHUNK_LAST", "")
+        span = f" (week {first})" if first == last else f" (weeks {first} to {last})"
+        out += [f"{head} {chunkOf}: {num(s.get('CHUNK_ROWS'))} records{span} passed validation. "
+                "Review and commit:", url]
+        if left not in ("", "0"):
+            out.append(f"- FYI: {num(left)} records still to upload. After committing, run {again} "
+                       "to continue")
+    elif status == "paused":
+        out += [f"{head} chunked upload paused after {done} of {total} chunks; {num(left)} records "
+                f"still to upload. Run {again} to continue."]
+    elif status == "review":
         out += [f"{head} {new} new records{weeks(delta)} passed validation. Review and commit:", url]
     elif status == "waiting":
         out += [f"{head} submission {sid} is still waiting for your commit "
@@ -126,11 +147,10 @@ def section(s, folder):
     elif status == "waiting_invalid":
         out += [f"{head} submission {sid} failed validation "
                 f"({waitedFor(s.get('PENDING_CREATED', ''))}). Fix the cause, then "
-                f"`./close_submission.sh {s.get('SOURCE_NAME', '<SOURCE>')}` and run again.", url]
+                f"`{closeCmd}` and run again.", url]
     elif status == "invalid":
-        out += [f"{head} submission {sid} failed validation ({num(s.get('ERRORS'))} errors). "
-                f"Fix the cause, then `./close_submission.sh {s.get('SOURCE_NAME', '<SOURCE>')}` "
-                "and run again.", url]
+        out += [f"{head} submission {sid}{' (' + chunkOf + ')' if total else ''} failed validation ({num(s.get('ERRORS'))} errors). "
+                f"Fix the cause, then `{closeCmd}` and run again.", url]
     elif status == "guard":
         out += [f"{head} stopped: {new} new records is over the limit of "
                 f"{num(s.get('MAX_NEW'))}. Nothing uploaded. Likely a sample-ID change; "
@@ -138,7 +158,9 @@ def section(s, folder):
     elif status == "nothing_new":
         out += [f"{head} nothing new ({num(s.get('IN_SCOPE'))} records checked)."]
     elif status == "dry_run":
-        out += [f"{head} dry run: {new} new records{weeks(delta)} would be uploaded "
+        inChunks = (f" in {total} chunks of up to {num(s.get('CHUNK_SIZE'))}"
+                    if total else "")
+        out += [f"{head} dry run: {new} new records{weeks(delta)} would be uploaded{inChunks} "
                 f"(`{rel(delta)}`)."]
     else:  # failed
         reason = s.get("REASON", "")

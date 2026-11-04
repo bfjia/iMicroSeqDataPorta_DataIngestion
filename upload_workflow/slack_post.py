@@ -1,6 +1,6 @@
 """Post msg.md (the run's notification digest) to Slack.
 
-One post per run: run_weekly.sh (and a standalone run_source.sh) call this
+One post per run: run_weekly_update.sh (and a standalone run_initial_upload.sh) call this
 right after notify.py, when SLACK_CHANNEL is set in pipeline.conf. Dry runs
 never post.
 

@@ -8,8 +8,8 @@ Reference for running the pipeline: every command and option, the settings files
 ## Commands and options
 
 ```
-./run_source.sh <SOURCE> [--env dev|prod] [--dry-run] [--force] [--holdout-weeks N] [--holdout-random N] [--keep-work]
-./run_weekly.sh [--env dev|prod] [--dry-run]
+./run_initial_upload.sh <SOURCE> [--env dev|prod] [--dry-run] [--force] [--chunk] [--holdout-weeks N] [--holdout-random N] [--keep-work]
+./run_weekly_update.sh [--env dev|prod] [--dry-run]
 ./close_submission.sh <SOURCE> [--env dev|prod] [--yes]
 ./list_sources.sh [--check]
 ```
@@ -19,10 +19,33 @@ Reference for running the pipeline: every command and option, the settings files
 | `--env dev\|prod` | Which portal. Without it, `PORTAL_ENV` in `pipeline.conf` (dev). |
 | `--dry-run` | Every step except the upload. It still logs in and reads from the portal. |
 | `--force` | Upload even if new > `MAX_NEW` (first loads, known backfills) |
+| `--chunk` | **First loads.** Upload in chunks of `CHUNK_SIZE` (10,000), one submission each, and ask before every chunk. Not limited by `MAX_NEW`. Needs a terminal. See below. |
 | `--holdout-weeks N` / `--holdout-random N` | TEST ONLY: hold back rows to create a delta for the next run |
 | `--keep-work` | Keep `in_scope.csv`, `published.csv` and `submit/` |
 
-`run_weekly.sh` runs every folder in `data_ETL/` that has a `source.conf` with `ENABLED=1` (or
+`run_initial_upload.sh` runs one source. Use it for a source's first load and for one-off runs.
+`run_weekly_update.sh` calls it for every enabled source.
+
+**`--chunk`** splits a big first load into submissions of at most `CHUNK_SIZE` records:
+
+- **Order:** the new records are sorted oldest first, after any `--holdout-*` hold-back, so
+  held-back records are never in a chunk.
+- **One at a time:** before each chunk the script shows its size and weeks and asks `yes` or
+  `stop`. From the second chunk on, it checks with the portal that the previous chunk has been
+  committed on the website. If it's still open, it says so and asks again.
+- **Resumable:** `stop` (or Ctrl+D) ends the run. Running `--chunk` again carries on with what
+  isn't published yet, because the comparison with the portal leaves out committed chunks.
+- **Long sessions:** each chunk gets a fresh login (dev tokens last 3 hours) and up to an hour to
+  validate.
+- **Problems:** a chunk that fails validation stops the run (`invalid`). Fix the cause, close it
+  (`close_submission.sh`) and run `--chunk` again.
+
+```bash
+./run_initial_upload.sh PHAC --env prod --chunk --dry-run   # show the chunk plan
+./run_initial_upload.sh PHAC --env prod --chunk             # upload, one confirmed chunk at a time
+```
+
+`run_weekly_update.sh` runs every folder in `data_ETL/` that has a `source.conf` with `ENABLED=1` (or
 `ENABLED_DEV` / `ENABLED_PROD` for that portal).
 Folders starting with `_` are skipped. A failing source doesn't stop the others. Its exit code is 1
 if any source ended 🔴. Only one run can happen at a time (`runs/.lock`).
@@ -50,6 +73,7 @@ only way short of `main.py --replace`.
 | `DEV_MIN_START_DATE` | `2026-09-01` | Dev: only weeks on or after this date are uploaded. `""` = no cutoff. |
 | `PROD_MIN_START_DATE` | `""` | Prod: the same, empty = full history |
 | `DEFAULT_MAX_NEW` | `2000` | Size guard for sources that don't set `MAX_NEW` |
+| `CHUNK_SIZE` | `10000` | Most records per submission with `--chunk` |
 | `SLACK_CHANNEL` | `C0CDQRKNWFK` | Slack channel ID that gets `msg.md` after each run (#_integration_notifications). `""` = don't post. |
 
 **`data_ETL/<SOURCE>/source.conf`**:
@@ -61,7 +85,7 @@ only way short of `main.py --replace`.
 | `CATEGORY_DEV` / `CATEGORY_PROD` | `imicroseq_wastewater` / `imicroseq_environmental` | Portal category. The two portals name it differently (same dictionary). |
 | `UPLOAD_CSV` | `curated/PHAC-NWMP.dedup.csv` | What `etl.sh` writes, relative to the source folder |
 | `MAX_NEW` | `2000` | Size guard |
-| `ENABLED` | `1` | `0` = `run_weekly.sh` skips the source |
+| `ENABLED` | `1` | `0` = `run_weekly_update.sh` skips the source |
 
 `CATEGORY`, `MAX_NEW` and `ENABLED` can also be given per portal with a `_DEV` or `_PROD` suffix.
 The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a new source on dev only.
@@ -100,14 +124,12 @@ against prod: `PORTAL_ENV=prod python upload_workflow/check_pending.py --organiz
 | Review link | `https://dev.virusseq-dataportal.ca/submission/environmental/<id>` | `https://imicroseq-dataportal.ca/submission/environmental/<id>` |
 | PHAC organization | `PHAC-AUTOINGEST` | `PHAC-NWMP` |
 
-**Prod status (2026-11-03).** Nothing has been uploaded to prod by this pipeline.
+**Prod status (2026-11-03).** Nothing has been uploaded to prod by this pipeline. Nothing is open
+for `PHAC-NWMP`.
 
 - **Permission:** the prod account has `WW-PHAC-NWMP.WRITE`.
-- **Blocked by an old empty submission:** submission 233 for `PHAC-NWMP` is open (status `OPEN`,
-  0 records, created 2026-07-14). Every prod run stops at the pending check until it's closed
-  (`./close_submission.sh PHAC --env prod`).
-- **First load:** a prod dry run finds all 51,224 PHAC records as new. That is over `MAX_NEW`, so
-  it needs `--force`. A single upload that size is untested and may need splitting into chunks.
+- **First load:** a prod dry run finds all 51,224 PHAC records as new: 6 chunks with `--chunk`
+  (2020-10-25 to 2026-10-18).
 
 Commits stay manual on the website, in both portals. `runs/`, `msg.md` and the Slack channel are
 shared by both; the run log, `status.env` (`PORTAL_ENV`) and the `msg.md` headline say which portal
@@ -123,7 +145,7 @@ long as the PC is on. Find your distro name with `wsl.exe -l -v`, then run this 
 
 ```
 schtasks /Create /TN "iMicroSeq weekly ingestion" /SC WEEKLY /D MON /ST 09:00 ^
-  /TR "wsl.exe -d <Distro> -- bash -lc '/mnt/d/OneDrive/ProjectIngestion/run_weekly.sh'"
+  /TR "wsl.exe -d <Distro> -- bash -lc '/mnt/d/OneDrive/ProjectIngestion/run_weekly_update.sh'"
 ```
 
 **cron inside WSL.** This only fires while WSL is running. This WSL has no systemd, so the cron
@@ -131,12 +153,12 @@ service has to be started after every WSL restart (`sudo service cron start`), u
 enabled in `/etc/wsl.conf`. Step-by-step for operators: [SOP_weekly_upload.md](SOP_weekly_upload.md), Procedure J.
 
 ```
-0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
+0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly_update.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
 ```
 
 cron gives the script a bare environment (`PATH=/usr/bin:/bin`, no conda, working directory
 `$HOME`). This was tested with `env -i` and works. `runs/cron.log` only captures what the
 scheduler itself sees; each run's full log is in `runs/<stamp>/weekly.log`.
 
-`run_weekly.sh` activates the `ProjectIngestion` conda env by itself. It looks for `$CONDA_EXE`,
+`run_weekly_update.sh` activates the `ProjectIngestion` conda env by itself. It looks for `$CONDA_EXE`,
 falling back to `~/miniconda3/bin/conda`.
