@@ -38,6 +38,7 @@ ProjectIngestion/
 ├── run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
 ├── run_source.sh          one source end to end (steps 1-8 below)
 ├── close_submission.sh    discard a source's open (uncommitted) submission to start over
+├── list_sources.sh        every source's organization/category on dev and prod (--check: permissions)
 ├── pipeline.conf          pipeline-wide settings (default portal, date windows, size limit, Slack)
 ├── msg.md                 latest notification digest (every run; posted to Slack; gitignored)
 ├── SOP.md                 plain-language procedure
@@ -238,6 +239,7 @@ log.
 ./run_source.sh <SOURCE> [--env dev|prod] [--dry-run] [--force] [--holdout-weeks N] [--holdout-random N] [--keep-work]
 ./run_weekly.sh [--env dev|prod] [--dry-run]
 ./close_submission.sh <SOURCE> [--env dev|prod] [--yes]
+./list_sources.sh [--check]
 ```
 
 | Option | Effect |
@@ -283,15 +285,25 @@ only way short of `main.py --replace`.
 | Key | Example (PHAC) | Meaning |
 |---|---|---|
 | `SOURCE_ID` | `PHAC-NWMP` | Name used for run folders and messages |
-| `ORGANIZATION` | `PHAC-AUTOINGEST` | Portal organization: the Ego scope `WW-PHAC-AUTOINGEST.WRITE` minus `WW-` |
+| `ORGANIZATION_DEV` / `ORGANIZATION_PROD` | `PHAC-AUTOINGEST` / `PHAC-NWMP` | **Required, per portal.** The organization the source submits as: the account's Ego scope `WW-<ORG>.WRITE` minus `WW-`. Every portal names it differently, so there's no shared `ORGANIZATION`. |
 | `CATEGORY_DEV` / `CATEGORY_PROD` | `imicroseq_wastewater` / `imicroseq_environmental` | Portal category. The two portals name it differently (same dictionary). |
 | `UPLOAD_CSV` | `curated/PHAC-NWMP.dedup.csv` | What `etl.sh` writes, relative to the source folder |
 | `MAX_NEW` | `2000` | Size guard |
 | `ENABLED` | `1` | `0` = `run_weekly.sh` skips the source |
 
-Any of `ORGANIZATION`, `CATEGORY`, `MAX_NEW` and `ENABLED` can be given per portal with a `_DEV`
-or `_PROD` suffix. The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a new source on
-dev only.
+`CATEGORY`, `MAX_NEW` and `ENABLED` can also be given per portal with a `_DEV` or `_PROD` suffix.
+The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a new source on dev only.
+`upload_workflow/load_source_conf.sh` applies these rules for every script.
+
+`./list_sources.sh` prints the whole mapping, every source on both portals.
+`./list_sources.sh --check` also logs in to each portal and shows whether its account can write to
+each organization:
+
+```
+SOURCE     ID           PORTAL ENABLED  ORGANIZATION         CATEGORY                  CAN_WRITE
+PHAC       PHAC-NWMP    dev    yes      PHAC-AUTOINGEST      imicroseq_wastewater      yes
+PHAC       PHAC-NWMP    prod   yes      PHAC-NWMP            imicroseq_environmental   yes
+```
 
 **`upload_workflow/.env`** (never committed): one login per portal, `devPortalUser` /
 `devPortalPass` and `prodPortalUser` / `prodPortalPass`, and `duoliauthtoken`, the Slack bot's
@@ -342,12 +354,14 @@ against prod: `PORTAL_ENV=prod python upload_workflow/check_pending.py --organiz
 | Account (`.env`) | `devPortalUser` / `devPortalPass` | `prodPortalUser` / `prodPortalPass` |
 | Date window | from 2026-09-01 | full history |
 | Review link | `https://dev.virusseq-dataportal.ca/submission/environmental/<id>` | `https://imicroseq-dataportal.ca/submission/environmental/<id>` |
+| PHAC organization | `PHAC-AUTOINGEST` | `PHAC-NWMP` |
 
-**Prod status (2026-10-30).** Nothing has been uploaded to prod.
+**Prod status (2026-11-03).** Nothing has been uploaded to prod by this pipeline.
 
-- **No write permission yet:** the prod account only has `WW-TEST.WRITE`, not
-  `WW-PHAC-AUTOINGEST.WRITE`. Until the portal admins grant it, a prod upload stops at the
-  permission check. A `--dry-run` only warns.
+- **Permission:** the prod account has `WW-PHAC-NWMP.WRITE`.
+- **Blocked by an old empty submission:** submission 233 for `PHAC-NWMP` is open (status `OPEN`,
+  0 records, created 2026-07-14). Every prod run stops at the pending check until it's closed
+  (`./close_submission.sh PHAC --env prod`).
 - **First load:** a prod dry run finds all 51,224 PHAC records as new. That is over `MAX_NEW`, so
   it needs `--force`. A single upload that size is untested and may need splitting into chunks.
 

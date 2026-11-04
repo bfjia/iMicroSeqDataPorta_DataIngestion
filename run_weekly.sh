@@ -92,7 +92,7 @@ for dir in "${REPO_DIR}"/data_ETL/*/; do
     [[ -f "${dir}/source.conf" ]] || continue
 
     # ENABLED_DEV / ENABLED_PROD win over ENABLED on that portal.
-    enabled="$(ENABLED=1; source "${dir}/source.conf"; override="ENABLED_${PORTAL_ENV^^}"; echo "${!override:-${ENABLED}}")"
+    enabled="$(source "${REPO_DIR}/upload_workflow/load_source_conf.sh"; loadSourceConf "${dir}" "${PORTAL_ENV}"; echo "${ENABLED}")"
     if [[ "${enabled}" != 1 ]]; then
         echo "== Skipping ${name} (not enabled for ${PORTAL_ENV} in its source.conf)"
         continue

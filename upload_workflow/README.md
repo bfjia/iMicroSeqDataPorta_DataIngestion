@@ -40,7 +40,7 @@ All of them follow `$PORTAL_ENV` (dev unless set) for the portal, its login and 
 `--category`. They also take `--base-url` and `--token`. Without a token, they read
 `$PORTAL_TOKEN`, and failing that they log in fresh using `.env`. Each one runs standalone. Run
 them from anywhere with the `ProjectIngestion` env active, e.g.
-`PORTAL_ENV=prod python check_pending.py --organization PHAC-AUTOINGEST`. Don't reuse a
+`PORTAL_ENV=prod python check_pending.py --organization PHAC-NWMP`. Don't reuse a
 `$PORTAL_TOKEN` from one portal on the other.
 
 ### Portal stages (used by `main.py`)
@@ -72,6 +72,7 @@ submission. Without `--work-dir`, its working files go in `runs/main-<timestamp>
 | `diff_new_records.py` | 5 | Splits the curated rows into new / changed / unchanged against the published snapshot. Numbers are compared numerically (rel. 1e-6). A duplicate sample ID is a hard error. Prints `new= changed= unchanged=`. | `python diff_new_records.py --new a.csv --baseline published.csv --new-out delta.csv --changed-out changed.csv` |
 | `holdout_rows.py` | 5 | **Test only.** Holds back the newest N weeks plus N random older rows, to create a delta for the next run | `python holdout_rows.py --input delta.csv --output kept.csv --held-out held.csv --latest-weeks 1 --random 10` |
 | `close_submission.py` | — | Discards the org's open submission so a new one can start (used by `../close_submission.sh`). Shows it, then asks for its number unless `--yes`. Re-checks that it's gone. Never touches published records. | `python close_submission.py --organization PHAC-AUTOINGEST` |
+| `load_source_conf.sh` | — | Bash, sourced by the run scripts and `../list_sources.sh`. `loadSourceConf <dir> <dev\|prod>` reads a `source.conf` for one portal: `ORGANIZATION_<ENV>` (required), plus `_DEV`/`_PROD` overrides for `CATEGORY`, `MAX_NEW`, `ENABLED`. `checkSourceConf` reports what's missing. | `source load_source_conf.sh; loadSourceConf ../data_ETL/PHAC prod` |
 | `notify.py` | 8 | Builds the run's single `msg.md` digest from each source's `status.env` | `python notify.py --run-dir runs/<stamp> --out msg.md` |
 | `slack_post.py` | 8 | Posts `msg.md` to Slack (`chat.postMessage`) after converting it to Slack markdown. Token: `duoliauthtoken` in `.env`; the bot must be in the channel. `--print` shows the text and sends nothing. Modeled on `old/duoli.py`. | `python slack_post.py --file ../msg.md --channel C0123456789` |
 

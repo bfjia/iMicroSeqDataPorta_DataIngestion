@@ -7,7 +7,7 @@
 | **Updates** | Weekly. The whole history is republished each time, and recent weeks may be revised. |
 | **One input row** | One location × one week × one target: the weekly average viral concentration (`w_avg`) |
 | **Targets** | `covN2` (SARS-CoV-2), `fluA`, `fluB`, `rsv` |
-| **Portal org** | `PHAC-AUTOINGEST` on both portals; category `imicroseq_wastewater` on dev, `imicroseq_environmental` on prod (see `source.conf`) |
+| **Portal org** | `PHAC-AUTOINGEST` on dev, `PHAC-NWMP` on prod; category `imicroseq_wastewater` on dev, `imicroseq_environmental` on prod (see `source.conf`) |
 | **Size** | 2026-10-30 feed: 63,291 rows → 51,224 unique records. About 210–220 new records per complete week. |
 
 ## The ETL, step by step (`etl.sh`)
@@ -102,5 +102,5 @@ the row with a non-blank `geo loc name (site)` and preserves the original order.
 - **Dev window.** Dev only receives weeks from `DEV_MIN_START_DATE` (2026-09-01) on. That is
   1,437 records (7 weeks) in the 2026-10-30 feed.
 - **Prod gets the full history** (`PROD_MIN_START_DATE` is empty): 51,224 records in the
-  2026-10-30 feed. Nothing has been uploaded to prod yet. The prod account still needs
-  `WW-PHAC-AUTOINGEST.WRITE` there, and the first load is over the 2,000 size guard.
+  2026-10-30 feed. Nothing has been uploaded to prod yet. The first load is over the 2,000 size
+  guard, and an old empty submission (233) has to be closed first.

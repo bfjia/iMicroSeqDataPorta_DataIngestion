@@ -51,6 +51,7 @@ folders under `data_ETL/`. PHAC (NWMP) is the first one.
 run_weekly.sh          scheduler entry point: every enabled source, then one msg.md
 run_source.sh          one source: pending check -> ETL -> date window -> snapshot -> diff -> guard -> upload+validate
 close_submission.sh    discard a source's open submission (asks for its number) so a new one can start
+list_sources.sh        each source's organization/category per portal; --check logs in and checks WRITE
 pipeline.conf          PORTAL_ENV (default portal), DEV_/PROD_MIN_START_DATE, DEFAULT_MAX_NEW, SLACK_CHANNEL
 data_ETL/<SOURCE>/     source.conf + etl.sh (+ scripts/, raw/, curated/)
 data_ETL/_template/    copy-me skeleton for a new source
@@ -64,6 +65,8 @@ old/                   original workflow (read-only, gitignored)
 ## Source contract
 
 `data_ETL/<NAME>/etl.sh` takes no arguments and writes `UPLOAD_CSV` (named in `source.conf`).
+`source.conf` must name the organization **per portal** (`ORGANIZATION_DEV`, `ORGANIZATION_PROD`);
+each portal names it differently. `upload_workflow/load_source_conf.sh` is the one loader.
 That CSV has the iMicroSeq column titles and **exactly one row per `specimen collector sample ID`**.
 Deduping is the source's job; `diff_new_records.py` hard-errors on duplicates. Details are in
 `data_ETL/README.md`.
@@ -92,8 +95,9 @@ bash data_ETL/PHAC/etl.sh           # ETL only
   `submission-service.`. Its category is `imicroseq_environmental` (id 1); dev's is
   `imicroseq_wastewater` (id 3). The dictionary is the same: v1.17, 163 fields. Sources set
   `CATEGORY_DEV` / `CATEGORY_PROD`.
-- **Each portal has its own account** in `.env` (`devPortalUser`… / `prodPortalUser`…). Its scopes
-  differ: on 2026-10-30, prod only had `WW-TEST.*`, no `WW-PHAC-AUTOINGEST.WRITE`.
+- **Each portal has its own account** in `.env` (`devPortalUser`… / `prodPortalUser`…), with its
+  own scopes and its own organization names. PHAC is `PHAC-AUTOINGEST` on dev, `PHAC-NWMP` on prod
+  (`WW-PHAC-NWMP.WRITE` granted 2026-11-03).
 
 - **Organization = Ego scope minus `WW-`.** Scope `WW-PHAC-AUTOINGEST.WRITE` → org
   `PHAC-AUTOINGEST`. It is case-sensitive. A wrong org gives a generic 403. Tokens are snapshots:
@@ -111,7 +115,8 @@ bash data_ETL/PHAC/etl.sh           # ETL only
 
 ## Prod: what's still open
 
-- The prod account needs `WW-PHAC-AUTOINGEST.WRITE` (portal admins).
+- Submission 233 (`PHAC-NWMP`, prod) is an old empty `OPEN` submission from 2026-07-14. It
+  blocks prod runs until the owner closes it (or OKs closing it).
 - The first prod load is the full history (51,224 PHAC records). That's over `MAX_NEW`, so it
   needs `--force`, and may need chunked uploads. It's untested.
 - Commits stay manual on the website.

@@ -101,17 +101,11 @@ esac
 export PORTAL_ENV
 ENV_UPPER="${PORTAL_ENV^^}"
 
-SOURCE_ID=""; ORGANIZATION=""; CATEGORY=""; UPLOAD_CSV=""; MAX_NEW=""; ENABLED=1
-# shellcheck disable=SC1091
-source "${SOURCE_DIR}/source.conf"
-# Per-portal settings: e.g. CATEGORY_PROD overrides CATEGORY on prod.
-for key in ORGANIZATION CATEGORY MAX_NEW; do
-    override="${key}_${ENV_UPPER}"
-    if [[ -n "${!override:-}" ]]; then printf -v "${key}" '%s' "${!override}"; fi
-done
-for var in SOURCE_ID ORGANIZATION CATEGORY UPLOAD_CSV; do
-    [[ -n "${!var}" ]] || { echo "ERROR: ${SOURCE_DIR}/source.conf must set ${var} (or ${var}_${ENV_UPPER})" >&2; exit 2; }
-done
+# The source's settings for this portal (organization, category, ...).
+# shellcheck source=upload_workflow/load_source_conf.sh
+source "${UPLOAD_DIR}/load_source_conf.sh"
+loadSourceConf "${SOURCE_DIR}" "${PORTAL_ENV}"
+checkSourceConf "${SOURCE_DIR}" "${PORTAL_ENV}" || exit 2
 MAX_NEW="${MAX_NEW:-${DEFAULT_MAX_NEW}}"
 cutoffVar="${ENV_UPPER}_MIN_START_DATE"
 CUTOFF="${!cutoffVar:-}"
@@ -239,7 +233,8 @@ if [[ "${PENDING}" == 1 ]]; then
     setStatus PENDING_STATUS "${PENDING_STATUS}"
     setStatus PENDING_CREATED "${PENDING_CREATED}"
     echo "      Submission ${PENDING_ID} is still open (${PENDING_STATUS}), created ${PENDING_CREATED}."
-    echo "      Stopping before any work. It needs to be committed or fixed on the website:"
+    echo "      Stopping before any work. Commit it on the website, or close it with"
+    echo "      ./close_submission.sh ${SOURCE_NAME} --env ${PORTAL_ENV}:"
     echo "        ${PENDING_URL}"
     if [[ "${PENDING_STATUS}" == "INVALID" ]]; then
         finish waiting_invalid 1

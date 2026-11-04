@@ -52,19 +52,12 @@ case "${PORTAL_ENV}" in
     *) echo "ERROR: the portal must be dev or prod (got '${PORTAL_ENV}')" >&2; exit 2 ;;
 esac
 export PORTAL_ENV
-ENV_UPPER="${PORTAL_ENV^^}"
 
-ORGANIZATION=""; CATEGORY=""
-# shellcheck disable=SC1091
-source "${SOURCE_DIR}/source.conf"
-# Per-portal settings: e.g. CATEGORY_PROD overrides CATEGORY on prod.
-for key in ORGANIZATION CATEGORY; do
-    override="${key}_${ENV_UPPER}"
-    if [[ -n "${!override:-}" ]]; then printf -v "${key}" '%s' "${!override}"; fi
-done
-for var in ORGANIZATION CATEGORY; do
-    [[ -n "${!var}" ]] || { echo "ERROR: ${SOURCE_DIR}/source.conf must set ${var} (or ${var}_${ENV_UPPER})" >&2; exit 2; }
-done
+# The source's organization and category on this portal.
+# shellcheck source=upload_workflow/load_source_conf.sh
+source "${REPO_DIR}/upload_workflow/load_source_conf.sh"
+loadSourceConf "${SOURCE_DIR}" "${PORTAL_ENV}"
+checkSourceConf "${SOURCE_DIR}" "${PORTAL_ENV}" || exit 2
 echo "Portal: ${PORTAL_ENV} · organization ${ORGANIZATION} · category ${CATEGORY}"
 
 # --- Conda environment ---------------------------------------------------

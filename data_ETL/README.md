@@ -42,15 +42,16 @@ picked up and shown in `msg.md` as "values the parser could not resolve".
 | Key | Meaning |
 |---|---|
 | `SOURCE_ID` | Short unique name used for run folders and in `msg.md`, e.g. `PHAC-NWMP` |
-| `ORGANIZATION` | Portal organization to submit as. It is the account's Ego scope `WW-<ORG>.WRITE` minus `WW-`, and case-sensitive. |
+| `ORGANIZATION_DEV`, `ORGANIZATION_PROD` | **Required.** The portal organization to submit as, one per portal, since each portal names it differently. It's the account's Ego scope `WW-<ORG>.WRITE` minus `WW-`, and case-sensitive. |
 | `CATEGORY` | Portal category. The portals name it differently, so set `CATEGORY_DEV="imicroseq_wastewater"` and `CATEGORY_PROD="imicroseq_environmental"`. |
 | `UPLOAD_CSV` | Path of the CSV `etl.sh` writes, relative to the source folder |
 | `MAX_NEW` | Size guard: a run finding more new records than this stops without uploading (unless `--force`) |
 | `ENABLED` | `1` = `run_weekly.sh` runs it, `0` = skipped |
 
-Any of `ORGANIZATION`, `CATEGORY`, `MAX_NEW` and `ENABLED` can be set per portal with a `_DEV` or
-`_PROD` suffix. The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a source on dev
-only.
+`CATEGORY`, `MAX_NEW` and `ENABLED` can also be set per portal with a `_DEV` or `_PROD` suffix. The
+suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a source on dev only. See every
+source's values on both portals with `./list_sources.sh`. Add `--check` to also confirm that each
+portal's account can write to the organization.
 
 ## Adding a new source, step by step
 
@@ -64,7 +65,9 @@ only.
    `Not Provided [GENEPIO:0001668]`. Print `[MISSING] …` for values it can't resolve, and leave
    them blank rather than guessing.
 3. **Fill in `etl.sh`:** fetch → convert → dedupe, writing `UPLOAD_CSV`.
-4. **Fill in `source.conf`.** Keep `ENABLED=0` for now.
+4. **Fill in `source.conf`.** Keep `ENABLED=0` for now. Set `ORGANIZATION_DEV` and
+   `ORGANIZATION_PROD`, ask the portal admins to grant the accounts `WW-<ORG>.WRITE` on each
+   portal, then check with `./list_sources.sh --check` (`CAN_WRITE` must say `yes`).
 5. **Run the ETL on its own** and check the output:
    ```bash
    conda activate ProjectIngestion

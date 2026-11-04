@@ -319,7 +319,7 @@ message, or the data team asks about a submission.
 cd /mnt/d/OneDrive/ProjectIngestion
 conda activate ProjectIngestion
 python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST                   # dev
-PORTAL_ENV=prod python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST   # prod
+PORTAL_ENV=prod python upload_workflow/check_pending.py --organization PHAC-NWMP         # prod
 ```
 
 | Line | Means |
@@ -331,8 +331,8 @@ PORTAL_ENV=prod python upload_workflow/check_pending.py --organization PHAC-AUTO
 | `PENDING_CREATED=` | when it was uploaded (UTC time) |
 | `PENDING_URL=` | its link: open it in your browser |
 
-`PHAC-AUTOINGEST` is PHAC's organization. For another source, use the `ORGANIZATION=` value in
-its `data_ETL/<SOURCE>/source.conf`.
+Each portal has its own name for a source's organization. PHAC's is `PHAC-AUTOINGEST` on dev and
+`PHAC-NWMP` on prod. For any source, `./list_sources.sh` shows its organization on both portals.
 
 **Every submission the tool has uploaded, committed ones included.** Each upload writes its link
 into that run's folder. List them all:
@@ -386,7 +386,7 @@ open, the tool uploads nothing new for that source, so closing it is how you sta
    cd /mnt/d/OneDrive/ProjectIngestion
    conda activate ProjectIngestion
    python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST                   # dev
-   PORTAL_ENV=prod python upload_workflow/check_pending.py --organization PHAC-AUTOINGEST   # prod
+   PORTAL_ENV=prod python upload_workflow/check_pending.py --organization PHAC-NWMP         # prod
    ```
 
    Note the `PENDING_ID` number.
@@ -443,7 +443,7 @@ Type <number> to close it, or press Enter to cancel:
 | `conda: command not found` | Terminal not set up for conda | Close and reopen the terminal, then retry |
 | `another pipeline run is in progress` | A run is already going (maybe the scheduled one) | Wait a few minutes and try again |
 | 🔴 *run failed during login* | Wrong or expired password for that portal (`devPortalPass` or `prodPortalPass` in `upload_workflow/.env`) | Update the password (see "Before you start", step 3) |
-| 🔴 *no write permission for …* / FYI *the account can't write to …* | That portal's account lost or never had access. On prod it hasn't been granted yet. | Ask the portal administrators to grant it |
+| 🔴 *no write permission for …* / FYI *the account can't write to …* | That portal's account lost or never had access to the organization | Run `./list_sources.sh --check` to see which. Ask the portal administrators to grant it. |
 | 🔴 *run failed during pending check* / *portal snapshot* | The portal is down or unreachable | Try again later (Procedure A) |
 | 🔴 *run failed during ETL* | The source's website is down or changed its file | Try later; if it repeats, tell the data team |
 | `msg.md` didn't change | The run didn't happen: the PC was off, WSL was closed, or cron wasn't started | Run it by hand (Procedure A). Check the schedule with `crontab -l` and `service cron status` (Procedure J), and look at `runs/cron.log` |
