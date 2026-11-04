@@ -7,7 +7,8 @@ Guidance for Claude Code (and any other contributor) working in this repository.
 A weekly pipeline that takes external wastewater surveillance data, converts it to the iMicroSeq
 data standard (`data_specification/`), and **uploads and validates** it on the data portal. A
 person then reviews and **commits** each submission on the portal website. Sources are plug-in
-folders under `data_ETL/`. PHAC (NWMP) is the first one.
+folders under `data_ETL/`. PHAC (NWMP) is the first one; CHI (Alberta, University of Calgary) has
+its ETL ready but no portal organization yet.
 
 - Docs live in `docs/`: `SOP_weekly_upload.md` and `SOP_new_source.md` (plain-language
   procedures), `how_a_run_works.md` and `configuration.md` (technical). `README.md` stays short and
@@ -29,8 +30,9 @@ folders under `data_ETL/`. PHAC (NWMP) is the first one.
    `imicroseq-dataportal.ca` (since 2026-10-30). Don't contact any other portal host.
    - Dev stays the default (`PORTAL_ENV="dev"` in `pipeline.conf`). Prod only via `--env prod`.
    - Hosts live only in `upload_workflow/portal_env.py`; scripts read `$PORTAL_ENV`.
-   - **Nothing has been uploaded to prod.** Don't upload or close anything on prod without the
-     owner's explicit go-ahead for that specific action. Reads and `--dry-run` are fine.
+   - **Prod holds real, published data** (PHAC's full history, and earlier CHI uploads). Don't
+     upload or close anything on prod without the owner's explicit go-ahead for that specific
+     action. Reads and `--dry-run` are fine.
 3. **Stay inside this folder.** Ask before using any temp directory, `/tmp` included. Working files
    go in `runs/`.
 4. **Use the conda env `ProjectIngestion`** (`environment.yaml`). Keep `environment.yaml` and
@@ -120,7 +122,10 @@ bash data_ETL/PHAC/etl.sh                       # ETL only
 
 ## Prod: what's still open
 
-- The first prod load is the full history (51,224 PHAC records): use
-  `./run_initial_upload.sh PHAC --env prod --chunk` (6 chunks of up to 10,000, one submission each,
-  confirmed and committed one by one). The chunk loop is tested only with stand-in portal scripts.
+- PHAC's first prod load is done: all 51,224 records published under `PHAC-NWMP` (by 2026-11-04,
+  with `--chunk`).
+- **CHI on prod:** prod already holds 26,681 CHI records under `AB_QPCR_CHI`, uploaded before this
+  pipeline with an earlier version of the converter. Today's converter differs from it (e.g.
+  pre-2023 COVID IDs end `_covid`, not `_sars-cov-2`), so a prod run as it stands would upload
+  about 6,500 samples a second time. Reconcile before CHI runs on prod; see `data_ETL/CHI/README.md`.
 - Commits stay manual on the website.

@@ -5,8 +5,9 @@ the [iMicroSeq data standard](data_specification/), and uploads the records that
 iMicroSeq data portal, where they're checked. A person then reviews each upload and **publishes
 ("commits") it on the portal website**. The tool never publishes anything by itself.
 
-There's one source so far: PHAC's National Wastewater Monitoring of Pathogens. More can be added,
-each as its own folder.
+Sources so far: PHAC's National Wastewater Monitoring of Pathogens, and Alberta data from the
+University of Calgary's Centre for Health Informatics (CHI, being set up). More can be added, each
+as its own folder.
 
 ## Documentation
 

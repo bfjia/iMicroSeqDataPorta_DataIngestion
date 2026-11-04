@@ -7,7 +7,8 @@ source.
 
 | Folder | Source | Status |
 |---|---|---|
-| [`PHAC/`](PHAC/README.md) | PHAC National Wastewater Monitoring of Pathogens (Health Infobase) | enabled |
+| [`PHAC/`](PHAC/README.md) | PHAC National Wastewater Monitoring of Pathogens (Health Infobase) | enabled on prod; off on dev (`ENABLED_DEV=0`) |
+| [`CHI/`](CHI/README.md) | Alberta wastewater: influenza A/B, RSV, COVID (Centre for Health Informatics, University of Calgary) | ETL ready; not enabled (no portal organization yet) |
 | [`_template/`](_template/README.md) | copy-me skeleton | never run (folders starting with `_` are skipped) |
 
 ## The source contract

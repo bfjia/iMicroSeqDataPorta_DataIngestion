@@ -100,7 +100,7 @@ stops. It never assumes nothing is pending.
 
 | | |
 |---|---|
-| **What** | Stops when there is nothing new (`nothing_new`, 🟢). It also stops when the new count is above `MAX_NEW` (2,000; a normal PHAC week is ~150–300), unless `--force` is given (`guard`, 🔴). |
+| **What** | Stops when there is nothing new (`nothing_new`, 🟢). It also stops when the new count is above `MAX_NEW` (PHAC: 500, a normal PHAC week is ~150–300; sources that don't set it use `DEFAULT_MAX_NEW`, 2,500), unless `--force` is given (`guard`, 🔴). |
 | **Why** | A sudden jump usually means the source changed how its IDs are built. Uploading would re-publish old data under new IDs. Use `--force` for an expected large batch, like a first load. |
 | **Chunked** | With `--chunk`, `MAX_NEW` doesn't apply, because a person confirms every chunk. `upload_workflow/chunk_rows.py` sorts `delta.csv` (after any hold-back) oldest first and cuts it into `chunks/chunk_NN.csv` of at most `CHUNK_SIZE` rows. The log lists each chunk's size and weeks. |
 | **Dry run** | With `--dry-run`, the run stops here (`dry_run`, 🟢) and `delta.csv` shows what would have been uploaded (with `--chunk`, also the chunk plan). |

@@ -72,7 +72,7 @@ only way short of `main.py --replace`.
 | `PORTAL_ENV` | `dev` | Portal used when no `--env` is given, including by the scheduler: `dev` or `prod` |
 | `DEV_MIN_START_DATE` | `2026-09-01` | Dev: only weeks on or after this date are uploaded. `""` = no cutoff. |
 | `PROD_MIN_START_DATE` | `""` | Prod: the same, empty = full history |
-| `DEFAULT_MAX_NEW` | `2000` | Size guard for sources that don't set `MAX_NEW` |
+| `DEFAULT_MAX_NEW` | `2500` | Size guard for sources that don't set `MAX_NEW` |
 | `CHUNK_SIZE` | `10000` | Most records per submission with `--chunk` |
 | `SLACK_CHANNEL` | `C0CDQRKNWFK` | Slack channel ID that gets `msg.md` after each run (#_integration_notifications). `""` = don't post. |
 
@@ -84,8 +84,8 @@ only way short of `main.py --replace`.
 | `ORGANIZATION_DEV` / `ORGANIZATION_PROD` | `PHAC-AUTOINGEST` / `PHAC-NWMP` | **Required, per portal.** The organization the source submits as: the account's Ego scope `WW-<ORG>.WRITE` minus `WW-`. Every portal names it differently, so there's no shared `ORGANIZATION`. |
 | `CATEGORY_DEV` / `CATEGORY_PROD` | `imicroseq_wastewater` / `imicroseq_environmental` | Portal category. The two portals name it differently (same dictionary). |
 | `UPLOAD_CSV` | `curated/PHAC-NWMP.dedup.csv` | What `etl.sh` writes, relative to the source folder |
-| `MAX_NEW` | `2000` | Size guard |
-| `ENABLED` | `1` | `0` = `run_weekly_update.sh` skips the source |
+| `MAX_NEW` | `500` | Size guard |
+| `ENABLED` | `1`, with `ENABLED_DEV=0` (PHAC is off on dev) | `0` = `run_weekly_update.sh` skips the source |
 
 `CATEGORY`, `MAX_NEW` and `ENABLED` can also be given per portal with a `_DEV` or `_PROD` suffix.
 The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a new source on dev only.

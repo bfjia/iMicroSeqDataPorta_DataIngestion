@@ -162,7 +162,7 @@ CATEGORY_PROD="imicroseq_environmental"   # leave as is for wastewater data
   - Capital letters matter.
 - **`MAX_NEW`.** A run that finds more new records than this stops without uploading. It catches
   a source that suddenly changes its sample IDs. Set it well above a normal week (PHAC brings
-  ~215 a week and uses 2,000). The first load is allowed past it with `--force`.
+  ~215 a week and uses 500). The first load is allowed past it with `--force`.
 - **Categories.** Leave them as they are for wastewater data. The two portals call the same
   category by different names.
 
