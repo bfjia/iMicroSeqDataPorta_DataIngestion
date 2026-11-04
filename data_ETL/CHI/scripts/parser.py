@@ -46,7 +46,7 @@ SiteTypeDictionary = {
     "homeless shelter" : "Homeless shelter [ENVO:03501133]",
     "hospital" : "Hospital [ENVO:00002173]",
     "Odour control" : "Airport [ENVO:03501122]",
-    "other" : "!!!NOINFO",
+    "other" : "", #"!!!NOINFO",
     '' : ''
 }
 
@@ -97,14 +97,14 @@ FlowRateUnitDictionary = {
     "L/s" : "liter per second (L/s) [GENEPIO:0102195]",
     "m3/h" : "cubic meter per hour (m^3/h) [GENEPIO:0102194]",
     "m3/hr" : "cubic meter per hour (m^3/h) [GENEPIO:0102194]",
-    "m3/d" : "!!!MISSING",
-    "m3/day" : "!!!MISSING",
-    "ML/D" : "!!!MISSING",
+    "m3/d" : "cubic meter per day (m^3/day) [GENEPIO:0102224]",
+    "m3/day" : "cubic meter per day (m^3/day) [GENEPIO:0102224]",
+    "ML/D" : "megaliters per day (ML/day) [GENEPIO:0102223]",
     '' : ''
 }
 
 TotalDissolvedSolidsUnitDictionary = {
-    "mg/L" : "!!!MISSING",
+    "mg/L" : "milligram per liter (mg/L) [UO:0000273]",
     '' : ''
 }
 
@@ -148,16 +148,15 @@ GeneSymbolDictionary = {
 
 DiagnosticTargetUnitDictionary = {
     "cpMl" : "copies per mililiter (C/ml) [GENEPIO:0102225]",
-    "cpPerson" : "",  # copies per person: no such unit in the iMicroSeq list yet, so left blank
-    "gcGs" : "!!!MISSING",
+    "gcGs" : "copies per gram of solid (C/g)",
     "gcL" : "copies per liter (C/L) [GENEPIO:0102202]",
-    "gcMl" : "!!!MISSING",
-    "gcPMMoV" : "!!!MISSING",
-    "gcmL" : "!!!MISSING",
-    "other" : "!!!MISSING",
-    "ppms" : "!!!MISSING",
-    "tnms" : "!!!MISSING",
-    "gc" : "!!!MISSING",
+    "gcMl" : "copies per mililiter (C/ml) [GENEPIO:0102225]",
+    "gcPMMoV" : "copies per mililiter (C/ml) [GENEPIO:0102225]",
+    "gcmL" : "copies per mililiter (C/ml) [GENEPIO:0102225]",
+    "other" : "", #"!!!NOINFO",
+    "ppms" : "",
+    "tnms" : "",
+    "gc" : "count [UO:0000189]",
     '' : ''
 }
 
@@ -165,7 +164,8 @@ OrganismDictionary = {
     "inf_a" : "Influenza A virus [NCBITaxon:11320]",
     "inf_b" : "Influenza B virus [NCBITaxon:11520]",
     "rsv" : "Respiratory syncytial virus [NCBITaxon:12814]",
-    "covid" : "Severe acute respiratory syndrome coronavirus 2 [NCBITaxon:2697049]"
+    "covid" : "Severe acute respiratory syndrome coronavirus 2 [NCBITaxon:2697049]",
+    "sars-cov-2" : "Severe acute respiratory syndrome coronavirus 2 [NCBITaxon:2697049]"  # pre-2023 COVID: the IDs on prod use this name
 }
 
 OrganisationDictionary = {
@@ -200,11 +200,70 @@ specimenProcessingDictionary = {
     "University of Calgary" : "Centrifugation [OBI:0302886]"
 }
 
+# Added to "specimen processing details" for post-2023 COVID (aplWasteWaterAbData.json), whose
+# values are per person. Their unit is still copies per mL: the iMicroSeq list has no per-person unit.
+NormalizedNote = "Note: the diagnostic measurement values have been normalized to the population (copies per person)."
+
 specimenProcessingDetailsDictionary = {
     "University of Alberta" : "ultrafiltration method of concentration that is widely employed for recovery of viruses, including SARS-CoV-2, from different aqueous samples including wastewater, recreational water and agricultural run-off (Forés et al., 2021; Lee et al., 2021; Qiu et al., 2016; Qiu et al., 2022; Winona et al., 2001)",
     "University of Calgary" : "affinity column method based on the “4S” direct extraction protocol (Whitney et al., 2021)"
 }
 
+
+
+
+LatDictionary = {
+	"Airdrie" : "51.28420038 N",
+	"Banff" : "51.17755217 N",
+	"Bonnybrook" : "51.01300242 N",
+	"Brooks" : "50.56817366 N",
+	"Canmore" : "51.09010037 N",
+	"Cold Lake" : "54.46143752 N",
+	"Drumheller" : "51.46086263 N",
+	"Edmonton" : "53.51974439 N",
+	"Edson" : "53.58512132 N",
+	"Fish Creek" : "50.91175085 N",
+	"Fort McMurray" : "56.72340393 N",
+	"Fort Saskatchewan" : "53.69877386 N",
+	"Grande Prairie" : "55.16940753 N",
+	"High River" : "50.5761183 N",
+	"Jasper" : "52.87414255 N",
+	"Lacombe" : "52.46971051 N",
+	"Lethbridge" : "49.69210988 N",
+	"Medicine Hat" : "50.03505036 N",
+	"Okotoks" : "50.72225755 N",
+	"Pine Creek" : "50.85540439 N",
+	"Red Deer" : "52.27899596 N",
+	"Strathmore" : "51.04277662 N",
+	"Taber" : "49.79110262 N",
+    "Calgary" : "51.0447 N"
+}
+LonDictionary = {
+	"Airdrie" : "114.0123706 W",
+	"Banff" : "115.5687106 W",
+	"Bonnybrook" : "114.0247698 W",
+	"Brooks" : "111.8915376 W",
+	"Canmore" : "115.3493702 W",
+	"Cold Lake" : "110.1854346 W",
+	"Drumheller" : "112.7102398 W",
+	"Edmonton" : "113.4962173 W",
+	"Edson" : "116.429097 W",
+	"Fish Creek" : "114.0122371 W",
+	"Fort McMurray" : "111.3708443 W",
+	"Fort Saskatchewan" : "113.2166679 W",
+	"Grande Prairie" : "118.7891614 W",
+	"High River" : "113.8717249 W",
+	"Jasper" : "118.0827445 W",
+	"Lacombe" : "113.7300262 W",
+	"Lethbridge" : "112.8435278 W",
+	"Medicine Hat" : "110.6961939 W",
+	"Okotoks" : "113.9668527 W",
+	"Pine Creek" : "113.9885976 W",
+	"Red Deer" : "113.8132415 W",
+	"Strathmore" : "113.3967291 W",
+	"Taber" : "112.1496709 W",
+    "Calgary" : "114.0719 W"
+}
 
 
 
@@ -225,7 +284,7 @@ def convertAlbertaRsvFluintoiMicroSeq(sampleID, data):
     iMicroSeqFormattedMetadata["taxonomic identification process"] = "PCR assay [OBI:0002740]"
     iMicroSeqFormattedMetadata["purpose of sampling"] = "Wastewater pathogen surveillance [GENEPIO:0100872]"
     iMicroSeqFormattedMetadata["sample collected by organisation name"] = OrganisationDictionary[data["Site"]]
-    iMicroSeqFormattedMetadata["sample collected by contact email"] = "Not Provided [GENEPIO:0001668]"
+    iMicroSeqFormattedMetadata["sample collected by contact email"] = "paula.acostaamador@ucalgary.ca"
     iMicroSeqFormattedMetadata["data steward contact name"] = "Centre for Health Informatics, Cumming School of Medicine, University of Calgary"
     iMicroSeqFormattedMetadata["data steward contact email"] = "chi@ucalgary.ca"
     iMicroSeqFormattedMetadata["sample collection data steward name"] = "Centre for Health Informatics, Cumming School of Medicine, University of Calgary"
@@ -240,8 +299,8 @@ def convertAlbertaRsvFluintoiMicroSeq(sampleID, data):
     iMicroSeqFormattedMetadata["geo loc name (state/province/territory)"] = "Alberta [GAZ:00002566]"
     iMicroSeqFormattedMetadata["geo loc name (site)"] = data["Site"].replace(" Wastewater Treatment Plant", "") + " WWTP"
     iMicroSeqFormattedMetadata["geo loc name (city)"] = data["Site"].replace(" Wastewater Treatment Plant", "")
-    iMicroSeqFormattedMetadata["geo loc latitude"] = "Not Provided [GENEPIO:0001668]"
-    iMicroSeqFormattedMetadata["geo loc longitude"] = "Not Provided [GENEPIO:0001668]"
+    iMicroSeqFormattedMetadata["geo loc latitude"] = LatDictionary[iMicroSeqFormattedMetadata["geo loc name (city)"]]
+    iMicroSeqFormattedMetadata["geo loc longitude"] = LonDictionary[iMicroSeqFormattedMetadata["geo loc name (city)"]]
     iMicroSeqFormattedMetadata["environmental site"] = "Wastewater treatment plant [ENVO:00002272]"
     iMicroSeqFormattedMetadata["proximal environmental site"] = ""
     iMicroSeqFormattedMetadata["presampling activity ID"] = ""
@@ -259,6 +318,8 @@ def convertAlbertaRsvFluintoiMicroSeq(sampleID, data):
     iMicroSeqFormattedMetadata["experimental specimen role type"] = "Biological replicate [EFO:0002091]"
     iMicroSeqFormattedMetadata["specimen processing"] = specimenProcessingDictionary[OrganisationDictionary[data["Site"]]]
     iMicroSeqFormattedMetadata["specimen processing details"] = specimenProcessingDetailsDictionary[OrganisationDictionary[data["Site"]]]
+    if data.get("Normalized"):
+        iMicroSeqFormattedMetadata["specimen processing details"] += ". " + NormalizedNote
     iMicroSeqFormattedMetadata["experimental protocol name"]  = "McCalder et al. 2025"
     iMicroSeqFormattedMetadata["experimental protocol url"] = "https://doi.org/10.3389/fmicb.2025.1547831"
     iMicroSeqFormattedMetadata["experimental control details"] = ""
@@ -362,7 +423,7 @@ def convertAlbertaRsvFluintoiMicroSeq(sampleID, data):
         iMicroSeqFormattedMetadata["gene symbol " + str(i)] = "N"
         iMicroSeqFormattedMetadata["diagnostic target presence " + str(i)] = "diagnostic target absent [GENEPIO:0100988]" if data["V"] == 0 else "diagnostic target present [GENEPIO:0100987]"
         iMicroSeqFormattedMetadata["diagnostic measurement value " + str(i)] = data['V']
-        iMicroSeqFormattedMetadata["diagnostic measurement unit " + str(i)] = DiagnosticTargetUnitDictionary[data["Unit"]]
+        iMicroSeqFormattedMetadata["diagnostic measurement unit " + str(i)] = DiagnosticTargetUnitDictionary["cpMl"]
         iMicroSeqFormattedMetadata["diagnostic measurement method " + str(i)] = "Quantitative real time polymerase chain reaction (qPCR) [OBI:0000893]"
         i = 2
         iMicroSeqFormattedMetadata["target taxonomic name " + str(i)] = OrganismDictionary[data["Organism"]]
@@ -370,7 +431,7 @@ def convertAlbertaRsvFluintoiMicroSeq(sampleID, data):
         iMicroSeqFormattedMetadata["gene symbol " + str(i)] = "N"
         iMicroSeqFormattedMetadata["diagnostic target presence " + str(i)] = "diagnostic target absent [GENEPIO:0100988]" if data["V2"] == 0 else "diagnostic target present [GENEPIO:0100987]"
         iMicroSeqFormattedMetadata["diagnostic measurement value " + str(i)] = data['V2']
-        iMicroSeqFormattedMetadata["diagnostic measurement unit " + str(i)] = DiagnosticTargetUnitDictionary[data["Unit"]]
+        iMicroSeqFormattedMetadata["diagnostic measurement unit " + str(i)] = DiagnosticTargetUnitDictionary["cpMl"]
         iMicroSeqFormattedMetadata["diagnostic measurement method " + str(i)] = "Quantitative real time polymerase chain reaction (qPCR) [OBI:0000893]"
     else:
 
@@ -380,10 +441,10 @@ def convertAlbertaRsvFluintoiMicroSeq(sampleID, data):
         iMicroSeqFormattedMetadata["gene symbol " + str(i)] = "Not Provided [GENEPIO:0001668]"
         iMicroSeqFormattedMetadata["diagnostic target presence " + str(i)] = "diagnostic target absent [GENEPIO:0100988]" if data["V"] == 0 else "diagnostic target present [GENEPIO:0100987]"
         iMicroSeqFormattedMetadata["diagnostic measurement value " + str(i)] = data['V']
-        iMicroSeqFormattedMetadata["diagnostic measurement unit " + str(i)] = DiagnosticTargetUnitDictionary[data["Unit"]]
+        iMicroSeqFormattedMetadata["diagnostic measurement unit " + str(i)] = DiagnosticTargetUnitDictionary["cpMl"]
         iMicroSeqFormattedMetadata["diagnostic measurement method " + str(i)] = "Quantitative real time polymerase chain reaction (qPCR) [OBI:0000893]"
 
-    iMicroSeqFormattedMetadata["authors"] = "Centre for Health Informatics, Cumming School of Medicine, University of Calgary"
+    iMicroSeqFormattedMetadata["authors"] = "Centre for Health Informatics, Cumming School of Medicine, University of Calgary; UCalgary and the Pan-Alberta WBS Network led by Drs. Hubert, Parkins (UCalgary), Drs. Lee, Pang, Qiu (UAlberta). Our team relies on a large and very talented group of trainees and highly-qualified technical staff."
     iMicroSeqFormattedMetadata["citation URL"] = "https://covid-tracker.chi-csm.ca/"
     
     return iMicroSeqFormattedMetadata
@@ -413,7 +474,6 @@ def parseRSVFluData(path):
                     "Date": date,
                     "V": values.get("v") if len(values) != 0 else 0,
                     "SD": values.get("sd", None),
-                    "Unit": "cpMl",
                 })
 
     df = pd.DataFrame(rows).astype(object).fillna("")
@@ -431,13 +491,12 @@ def parsePre2023COVID(path, skipSiteDates=()):
     for datapoint in data:
         rows.append({
             "Site": datapoint.get('location'),
-            "Organism": "covid",
+            "Organism": "sars-cov-2",
             "Date": datapoint.get('date'),
             "V": datapoint.get("n1_mean", 0),
             "V2": datapoint.get("n2_mean", 0),
             "SD": datapoint.get("n1_sd", ""),
             "SD2": datapoint.get("n2_sd", ""),
-            "Unit": "cpMl",
         })
 
     df = pd.DataFrame(rows).astype(object).fillna("")
@@ -456,7 +515,7 @@ def parsePost2023COVID(path):
                 "Date": row.get("date"),
                 "V": row.get("n1", 0),
                 "V2": row.get("n2", 0),
-                "Unit": "cpPerson",
+                "Normalized": True,
             })
 
     df = pd.DataFrame(rows).astype(object).fillna("")

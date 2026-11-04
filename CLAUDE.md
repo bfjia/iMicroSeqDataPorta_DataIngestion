@@ -125,7 +125,9 @@ bash data_ETL/PHAC/etl.sh                       # ETL only
 - PHAC's first prod load is done: all 51,224 records published under `PHAC-NWMP` (by 2026-11-04,
   with `--chunk`).
 - **CHI on prod:** prod already holds 26,681 CHI records under `AB_QPCR_CHI`, uploaded before this
-  pipeline with an earlier version of the converter. Today's converter differs from it (e.g.
-  pre-2023 COVID IDs end `_covid`, not `_sars-cov-2`), so a prod run as it stands would upload
-  about 6,500 samples a second time. Reconcile before CHI runs on prod; see `data_ETL/CHI/README.md`.
+  pipeline with `abparser.py`. `data_ETL/CHI/scripts/parser.py` is that script adapted, with the
+  same sample IDs (pre-2023 COVID ends `_sars-cov-2`), so a prod run adds only new records (~1,490
+  on 2026-11-04). The improvements agreed since (null reasons, "Banff WWTP") mean every existing
+  record is reported as revised on each run, by the owner's choice. See `data_ETL/CHI/README.md`,
+  including its two known issues (CHI recalculates COVID values; new copies cause duplicate uploads).
 - Commits stay manual on the website.

@@ -6,8 +6,8 @@
 | **Files** | `rsvFlu.json`, `aplWasteWaterAbData.json`, `wasteWaterAbData.json`, all from https://chi-covid-data.pages.dev/ |
 | **Updates** | Each file holds the whole history. Sites report one or two samples a week. |
 | **One record** | One site × one sample date × one pathogen. For COVID, N1 and N2 are targets 1 and 2 of the same record. |
-| **Pathogens** | influenza A (`inf_a`), influenza B (`inf_b`), RSV (`rsv`), SARS-CoV-2 (`covid`) |
-| **Portal org** | Not set yet (`ORGANIZATION_DEV` / `ORGANIZATION_PROD` in `source.conf` are empty). Prod already has earlier CHI uploads under `AB_QPCR_CHI`; see "Status". |
+| **Pathogens** | influenza A (`inf_a`), influenza B (`inf_b`), RSV (`rsv`), SARS-CoV-2 (`covid`; `sars-cov-2` in pre-2023 IDs) |
+| **Portal org** | Not set yet (`ORGANIZATION_DEV` / `ORGANIZATION_PROD` in `source.conf` are empty). Prod already holds CHI's earlier uploads under `AB_QPCR_CHI`; see "Status". |
 | **Size** | 2026-11-04 files: 28,076 records (19,218 influenza/RSV, 8,858 COVID), 2020-05-18 to 2026-10-28. About 30 new records a week. |
 
 ## The ETL, step by step (`etl.sh`)
@@ -28,6 +28,9 @@ never leaves a half-written file behind, and it retries 3 times.
 
 ### 2. Convert (`scripts/parser.py`)
 
+`parser.py` is the data team's `abparser.py` (the version used for the earlier prod uploads),
+adapted for this pipeline: command-line paths, one output CSV, the rules below, and the 163 columns.
+
 ```bash
 python scripts/parser.py --rsvflu raw/rsvFlu.json --covid raw/aplWasteWaterAbData.json \
     --covid-pre2023 raw/wasteWaterAbData.json --output curated/CHI.csv
@@ -38,20 +41,22 @@ mappings:
 
 | iMicroSeq field | Value |
 |---|---|
-| `specimen collector sample ID` | `{site}_{date}_{pathogen}`, e.g. `Banff_2024-07-17_covid`, `Bonnybrook Wastewater Treatment Plant_2022-01-03_inf_a` (see "Duplicates" below for `_1`, `_2`) |
+| `specimen collector sample ID` | `{site}_{date}_{pathogen}`, e.g. `Banff_2024-07-17_covid`, `Bonnybrook Wastewater Treatment Plant_2022-01-03_inf_a`. Pre-2023 COVID ends `_sars-cov-2` instead, e.g. `Edmonton_2020-05-18_sars-cov-2`, as on prod. See "Duplicates" below for `_1`, `_2`. |
 | `sampling site ID` | the site name |
 | `geo loc name (site)` / `(city)` | e.g. `Bonnybrook WWTP` / `Bonnybrook` (" Wastewater Treatment Plant" is shortened) |
 | `geo loc name (state/province/territory)` | `Alberta [GAZ:00002566]` |
-| `geo loc latitude` / `longitude` | `Not Provided [GENEPIO:0001668]` |
+| `geo loc latitude` / `longitude` | one fixed point per city (`LatDictionary` / `LonDictionary`), e.g. Edmonton `53.51974439 N` / `113.4962173 W`; the Calgary city series `51.0447 N` / `114.0719 W` |
 | `sample collection start date` | the sample date |
 | `sample collection end date` | the sample date + 1 day; duration `24` `Hour [UO:0000032]` |
 | `organism`, `target taxonomic name` | from the pathogen code, e.g. `rsv` → `Respiratory syncytial virus [NCBITaxon:12814]` |
-| `sample collected by organisation name` | University of Alberta or University of Calgary, by site (`OrganisationDictionary`) |
+| `sample collected by organisation name` / `contact email` | University of Alberta or University of Calgary, by site (`OrganisationDictionary`) / `paula.acostaamador@ucalgary.ca` |
 | `specimen processing`, `nucleic acid extraction kit` | by organisation: Alberta filtration + MagMAX™; Calgary centrifugation + custom (McCalder et al. 2025) |
+| `specimen processing details` | the organisation's concentration method. COVID from July 2023 adds: "Note: the diagnostic measurement values have been normalized to the population (copies per person)." |
 | `diagnostic measurement value` | influenza/RSV: `v`. COVID: N1 and N2 (`n1`/`n2`, or `n1_mean`/`n2_mean` before July 2023) |
-| `diagnostic measurement unit` | influenza/RSV and COVID before July 2023: `copies per mililiter (C/ml) [GENEPIO:0102225]`. COVID from July 2023: **blank** (see below) |
+| `diagnostic measurement unit` | `copies per mililiter (C/ml) [GENEPIO:0102225]` for every record |
 | `diagnostic target presence` | `diagnostic target absent [GENEPIO:0100988]` when the value is 0, otherwise `present` |
-| `data steward contact name` / `email`, `sample collection data steward name`, `authors` | Centre for Health Informatics, Cumming School of Medicine, University of Calgary / `chi@ucalgary.ca` |
+| `data steward contact name` / `email`, `sample collection data steward name` | Centre for Health Informatics, Cumming School of Medicine, University of Calgary / `chi@ucalgary.ca` |
+| `authors` | CHI, the Pan-Alberta WBS Network and its leads (the full text is in the script) |
 | `citation URL` | `https://covid-tracker.chi-csm.ca/` |
 | sequencing / host fields | `Not Applicable [GENEPIO:0001619]`, since this is PCR data and not sequencing |
 
@@ -62,9 +67,9 @@ changed without asking (see `CLAUDE.md`).
 
 - **Empty influenza/RSV entries (`{}`) mean "not detected"**: value `0`, target absent. They're
   about 60% of `rsvFlu.json` and follow the seasons (influenza B is empty most of the summer).
-- **COVID from July 2023 is in copies per person.** The iMicroSeq unit list has no such term yet,
-  so the unit is left blank. If the term is added later, records already published won't change by
-  themselves; the weekly run only reports them as revised.
+- **Every value is labelled copies per mL**, COVID from July 2023 included (agreed 2026-11-04,
+  and the same as the earlier prod uploads). COVID from July 2023 is really copies per person; the
+  iMicroSeq unit list has no such term, so those records say so in `specimen processing details`.
 - **`wasteWaterAbData.json`**: only its `raw` rows are used (not `normalized`), and its `Calgary`
   rows are skipped (the three Calgary plants are listed separately).
 - **July 2023 overlap.** Both COVID files have some site+dates in July 2023, in different units.
@@ -91,18 +96,39 @@ Not enabled (`ENABLED=0`). Next: the portal administrators create CHI's organiza
 prod and grant the tool's accounts `WW-<org>.WRITE`; then `source.conf` gets the two names, and
 the new-source SOP continues at Step 7 (dry run on dev).
 
-**Earlier uploads on prod.** Before this pipeline, CHI data was uploaded to prod with an earlier
-version of the converter: 26,681 records under the organization `AB_QPCR_CHI`, sample dates up to
-2025-12-18. Compared with today's converter (checked 2026-11-04, read only), with
-`AB_QPCR_CHI` as `ORGANIZATION_PROD`:
+**Earlier uploads on prod.** Before this pipeline, CHI data was uploaded to prod with
+`abparser.py`: 26,681 records under the organization `AB_QPCR_CHI`, sample dates up to
+2025-12-18. Compared with today's converter (checked 2026-11-04, read only), with `AB_QPCR_CHI` as
+`ORGANIZATION_PROD`, a prod run would:
 
-| | Records | What a prod run would do |
+| | Records | What happens |
 |---|---|---|
-| Pre-2023 COVID, IDs `<site>_<date>_sars-cov-2` on prod, `…_covid` today | 6,546 | upload them **again** under the new IDs |
-| The 15 duplicate pairs: mostly one plain ID on prod, `_1`/`_2` today | 30 | upload both copies; one usually duplicates what's published |
-| Influenza/RSV whose sample date moved by up to 3 days | 11 | upload again under the new date |
-| Sample dates after 2025-12-18 | 1,447 | upload (these are new) |
-| Same ID on both | 20,042 | report as revised every run, never re-upload. The earlier version had a contact email and coordinates, no null reasons, `C/ml` on post-2023 COVID, and some values CHI has since revised. |
+| Sample dates after 2025-12-18 | 1,447 | uploaded (new) |
+| The 15 duplicate pairs, as `_1`/`_2` | 30 | uploaded. 13 pairs are on prod once already, under the plain ID (the last copy), so one of each pair repeats a published record. |
+| Influenza/RSV whose sample date CHI has moved by up to 3 days | 11 | uploaded under the new date; the old date stays on prod |
+| Same ID on both | 26,588 | reported as revised on every run, never re-uploaded. All of them differ in the improvements made since: `sample collection data steward name`, three null-reason fields, and `Banff WWTP` (prod: `BanffWWTP`); the 1,936 post-2023 COVID records also in the `specimen processing details` note. 1,857 also have values CHI has since revised. |
+| On prod but not in today's file | 93 | left alone: mostly the 60 pre-2023 July 2023 copies (the post-2023 file wins) and the plain IDs of the duplicate pairs |
 
-Settle these with the data team before CHI runs on prod. A different prod organization isn't a
-way around it: the pipeline would see nothing published there and upload all 28,076.
+So the weekly message for CHI on prod will always show about 26,600 revised records. Records
+published before this pipeline keep their old values; new ones get the improvements.
+
+## Known issues (not fixed yet)
+
+Both were found on 2026-11-04 while preparing to bring the earlier prod records in line. They're
+left as they are for now.
+
+1. **CHI recalculates its post-2023 COVID values.** These are per-person (normalized) values, and
+   CHI revises them across the whole history, not just recent weeks. Between the morning and
+   midday of 2026-11-04, 1,795 records already on prod (dated 2023-07-02 to 2025-12-16) changed
+   slightly, e.g. `Banff_2023-07-03_covid` N1 0.0478 → 0.0477.
+   - Weekly runs report these as revised and never re-upload them, so prod keeps the older values.
+   - Any file made to update the prod records goes stale as soon as CHI recalculates. Rebuild it
+     from a fresh ETL run right before it's applied (it is today's `CHI.csv` rows for the sample
+     IDs already on prod).
+2. **A new copy of an already-published record causes a duplicate upload.** The duplicates rule
+   numbers every differing copy (`_1`, `_2`). When CHI adds a second copy for a site and date that
+   is already on prod under the plain ID, the plain ID disappears from `CHI.csv` and both copies
+   are uploaded as new, so one of them repeats the published record.
+   - Seen on 2026-11-04 for `Calgary_2025-07-28_covid` and `Calgary_2025-11-17_covid`.
+   - A possible fix: the published copy keeps its plain ID and only additional copies are
+     numbered.
