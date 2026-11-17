@@ -80,8 +80,8 @@ Adding a new data source is a separate procedure: [SOP_new_source.md](SOP_new_so
 
 ## The weekly routine
 
-Once a week the tool runs by itself on GitHub, every Monday morning against prod (Procedure J).
-You can also run it by hand (Procedure A). After every run, do this:
+Once a week the tool runs by itself (once it's scheduled, Procedure J), or you run it by hand
+(Procedure A). After every run, do this:
 
 ### Step 1. Open the message
 
@@ -93,12 +93,9 @@ Code, or in the terminal with:
 cat /mnt/d/OneDrive/ProjectIngestion/msg.md
 ```
 
-**Runs on GitHub don't change the `msg.md` on this PC.** For those, read the Slack message, or
-open the run on GitHub (Procedure J): the message is at the top of the run's page.
-
-If no Slack message arrived after a scheduled run, check the run on GitHub (Procedure J). A line
-starting with `WARNING: msg.md was written but could not be posted to Slack` in the run's log means
-the post failed. Tell the data team.
+If no Slack message arrived after a scheduled run, check `msg.md`. A line starting with
+`WARNING: msg.md was written but could not be posted to Slack` in `runs/cron.log` or the run's
+`weekly.log` means the post failed. Tell the data team.
 
 ### Step 2. Look at the first line
 
@@ -291,51 +288,7 @@ Something broke: the internet, the portal being down, the login, or a change at 
 once more later with Procedure A. If it fails again, send the data team the 🔴 lines of
 `msg.md` and the `Log:` file it names.
 
-### Procedure J: the automatic weekly run
-
-The weekly run starts by itself on **GitHub**, every **Monday morning** (08:30 Pacific in winter,
-09:30 in summer; sometimes a little later). It runs against **prod** and uploads for real. Nothing
-is committed: you still review and commit on the website afterwards (the weekly routine above). It
-works whether or not this PC is on.
-
-**Use only one schedule.** If GitHub runs it, don't also set up crontab on this PC (J2), or the
-tool runs twice a week.
-
-#### J1. On GitHub (the normal way)
-
-**To see a run:** open the repository on GitHub
-(https://github.com/bfjia/iMicroSeqDataPorta_DataIngestion), click **Actions**, then
-**Weekly ingestion**. Each line is one run: ✅ finished cleanly, ❌ had a problem. Click a run to
-see its message (the same text as Slack) at the top of the page.
-
-**To start a prod run by hand** (for example, to check something before Monday):
-
-1. On the **Weekly ingestion** page, click **Run workflow** (on the right).
-2. Leave **Dry run** ticked to only check what would be uploaded to prod (nothing is sent, no
-   Slack message). Untick it only for a real prod upload.
-3. Click the green **Run workflow** button. The run appears in the list after a few seconds.
-
-**To test on dev** (data team): use the other workflow, **Dev test upload**, in the same Actions
-list. It never touches prod, and it only runs when someone starts it.
-
-1. Click **Dev test upload**, then **Run workflow**.
-2. Pick the **Source** (for example `PHAC`).
-3. **Dry run** is unticked here: the test really uploads to dev. Tick it to only check.
-4. Usually leave the other boxes as they are. For a repeat test, when dev already has
-   everything, put `1` in **holdout weeks** so the newest week is held back and stays new for the
-   next test.
-5. Click **Run workflow**. Afterwards, review the submission on the **dev** website and commit
-   it, or ask the data team to close it (Procedure L, without `--env prod`).
-
-**If the Monday run didn't happen** (no Slack message, nothing new in the list): GitHub switches
-the schedule off when nobody has changed the repository for 60 days. If the Weekly ingestion page
-shows a yellow banner saying it is disabled, click **Enable workflow**, then start a run by hand
-(above). If you can't see the Actions tab or the buttons, ask the data team.
-
-**If the login fails** on GitHub (🔴 *run failed during login*): the password stored on GitHub
-is out of date. Ask the data team to update it (configuration.md, "Scheduling the weekly run").
-
-#### J2. With crontab on this PC (only if GitHub isn't used)
+### Procedure J: run it automatically every week (crontab)
 
 This makes the computer start the weekly run by itself. You still read `msg.md` and commit on the
 website afterwards (the weekly routine above).
@@ -580,8 +533,7 @@ team. If the changes are expected, they send them with `run_edits.sh` (Procedure
 | 🔴 *no write permission for …* / FYI *the account can't write to …* | That portal's account lost or never had access to the organization | Run `./list_sources.sh --check` to see which. Ask the portal administrators to grant it. |
 | 🔴 *run failed during pending check* / *portal snapshot* | The portal is down or unreachable | Try again later (Procedure A) |
 | 🔴 *run failed during ETL* | The source's website is down or changed its file | Try later; if it repeats, tell the data team |
-| No Slack message on Monday | The GitHub run didn't happen or couldn't post | Check the run on GitHub (Procedure J1). Its schedule may have been switched off. |
-| `msg.md` didn't change | Normal after a GitHub run: those don't touch this PC. With crontab, the run didn't happen (the PC was off, WSL was closed, or cron wasn't started). | GitHub: read Slack or the run page (Procedure J1). Crontab: run it by hand (Procedure A), check the schedule with `crontab -l` and `service cron status` (Procedure J2), and look at `runs/cron.log`. |
+| `msg.md` didn't change | The run didn't happen: the PC was off, WSL was closed, or cron wasn't started | Run it by hand (Procedure A). Check the schedule with `crontab -l` and `service cron status` (Procedure J), and look at `runs/cron.log` |
 
 ## When to ask for help
 

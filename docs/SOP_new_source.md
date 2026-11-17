@@ -357,11 +357,8 @@ Procedures K and L, adding `--env prod`.
 Delete the line `ENABLED_PROD=0` from `source.conf`. Then run `./list_sources.sh --check`. Your
 source should show `ENABLED yes` and `CAN_WRITE yes` on both portals.
 
-The scheduled weekly run on GitHub runs **prod** ([SOP_weekly_upload.md](SOP_weekly_upload.md),
-Procedure J). From the next Monday on, it uploads your source's new records to prod. Dev isn't
-scheduled. To check the source on dev, use the **Dev test upload** workflow (Procedure J1) or run
-it locally. First add the source's folder name to the `source` options in
-`.github/workflows/dev_test.yml`.
+The weekly schedule runs **one** portal, the one `PORTAL_ENV` in `pipeline.conf` names (dev).
+Prod weekly runs need their own schedule line with `--env prod` ([SOP_weekly_upload.md](SOP_weekly_upload.md), Procedure J).
 
 ## Step 13. Document it and save it to git
 

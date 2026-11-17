@@ -54,8 +54,6 @@ its ETL ready but no portal organization yet.
 
 ```
 docs/                  SOPs (weekly upload, new source) + technical guides (how a run works, configuration)
-.github/workflows/     weekly_ingestion.yml: Monday REAL prod run (manual: prod, dry run by default)
-                       dev_test.yml: manual-only test uploads to dev (one source or ALL-ENABLED)
 run_weekly_update.sh   scheduler entry point: every enabled source, then one msg.md
 run_initial_upload.sh  one source: pending check -> ETL -> window -> snapshot -> diff -> guard -> upload new + edits (--chunk: first loads)
 run_edits.sh           one source, edits only: shows the revised published records, asks, sends them (run_initial_upload.sh --edits-only)
@@ -150,23 +148,5 @@ bash data_ETL/PHAC/etl.sh                       # ETL only
 - **Edits on prod:** on by default, as on dev (`DEFAULT_EDIT_REVISED=1`). Prod dry runs on
   2026-11-05 (reads only) found PHAC-NWMP 0 new and 69 edits, matched to prod's own system IDs.
   No edit has been sent to prod yet; the first goes with the next prod run
-  (`./run_weekly_update.sh --env prod`, or `./run_edits.sh PHAC --env prod`, which asks first),
-  which is the first scheduled GitHub Actions run if nobody runs it before.
+  (`./run_weekly_update.sh --env prod`, or `./run_edits.sh PHAC --env prod`, which asks first).
 - Commits stay manual on the website.
-
-## GitHub Actions (the weekly scheduler)
-
-- `.github/workflows/weekly_ingestion.yml` runs `run_weekly_update.sh --env prod` every Monday
-  (16:30 UTC). The owner chose real prod uploads on 2026-11-17. "Run workflow" by hand is prod
-  too, defaulting to dry run. The YAML only starts the script; keep the logic in Bash/Python
-  (rule 5).
-- `.github/workflows/dev_test.yml` is manual-only and always dev. It uploads by default, with
-  holdout/force inputs. Each workflow maps only its own portal's secrets, so a dev test can't
-  reach prod. A new source must be added to its `source` choice list.
-- **The repo is public, so Actions logs are public.** Secrets go in the `portal` environment
-  (main branch only) and in `env:` on the run step only. Never print a credential, never upload
-  `runs/` as an artifact, never add `pull_request_target`, and pin actions to commit SHAs.
-  `maskToken` in `run_initial_upload.sh` masks the minted portal JWT through `ACTIONS_LOG_FD`,
-  bypassing the tee so the mask line never reaches `run.log` / `msg.md`.
-- Don't trigger a live (non-dry) workflow run yourself; rules 1 and 2 apply as everywhere else.
-- Only one scheduler: no local crontab or Task Scheduler while the GitHub schedule is on.

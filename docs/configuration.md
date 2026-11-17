@@ -156,82 +156,9 @@ a run used.
 
 ## Scheduling the weekly run
 
-Use **one** scheduler, never two. Two schedulers mean two weekly runs: the second is stopped by the
-pending check, but it still posts a confusing Slack message. Pick a day after the source's weekly
-update.
+Nothing is scheduled yet. Pick a day after the source's weekly update, and choose one of these:
 
-### GitHub Actions (recommended)
-
-[`.github/workflows/weekly_ingestion.yml`](../.github/workflows/weekly_ingestion.yml) runs
-`run_weekly_update.sh` on a GitHub runner, so the PC doesn't need to be on. The workflow file only
-starts the script; all the logic stays in Bash and Python.
-
-- **Schedule:** Mondays at 16:30 UTC, a **real run against prod**. That is 08:30 Pacific in winter
-  and 09:30 in summer, since cron on GitHub is always UTC. GitHub can start scheduled jobs late at
-  busy times. `MAX_NEW`, `MAX_EDITS` and the pending check apply as usual, and nothing is
-  committed.
-- **By hand:** Actions tab → *Weekly ingestion* → *Run workflow*, also against prod. *Dry run* is
-  ticked by default.
-- **Dev test uploads:** a separate workflow,
-  [`.github/workflows/dev_test.yml`](../.github/workflows/dev_test.yml) (*Dev test upload*). It is
-  manual only and always runs against dev, and it uploads unless *Dry run* is ticked. Choose a
-  `source`, which runs `run_initial_upload.sh <SOURCE> --env dev` and ignores `ENABLED`, or
-  `ALL-ENABLED` (`run_weekly_update.sh --env dev`; only sources enabled for dev, and PHAC is
-  `ENABLED_DEV=0`). With one source, `holdout_weeks`, `holdout_random` and `force` give
-  `--holdout-weeks`, `--holdout-random` and `--force`. Holding records back leaves new ones for
-  the next test. A new source has to be added to the workflow's `source` options. `--chunk` and
-  `--edits-only` ask on a terminal, so they stay local.
-- **Each workflow gets only its own portal's login:** the weekly job gets the prod secrets, the
-  dev test job the dev ones. A dev test can't reach prod even by mistake.
-- **One run at a time:** a `concurrency` group per workflow keeps runs from overlapping
-  (`portal-ingestion` for prod, `dev-test` for dev). It does the job of `runs/.lock` across
-  machines.
-- **Results:** `msg.md` goes to Slack, as it does locally, and onto the run's summary page. The full
-  log is on the run page. `runs/` is thrown away with the runner and is **not** saved as an
-  artifact, because the repo is public. To dig into a run, repeat it locally with `--dry-run`.
-- **A failed run** (exit code 1) marks the run red, and GitHub emails the person who last edited
-  the workflow's schedule.
-
-**Secrets:** under *Settings → Environments*, create an environment named `portal`. Under
-*Deployment branches*, allow only `main`, and don't add required reviewers (they would block the
-unattended run). Add these secrets to it. Each one maps to the name the scripts read from
-`upload_workflow/.env`:
-
-| GitHub secret | Read by the scripts as |
-|---|---|
-| `PROD_PORTAL_USER` / `PROD_PORTAL_PASS` | `prodPortalUser` / `prodPortalPass` (weekly workflow only) |
-| `DEV_PORTAL_USER` / `DEV_PORTAL_PASS` | `devPortalUser` / `devPortalPass` (dev test workflow only) |
-| `SLACK_BOT_TOKEN` | `duoliauthtoken` (both; dev tests post too, like local dev runs, unless it's a dry run) |
-
-There's no `.env` file on the runner. `load_dotenv` finds nothing and the scripts use the
-environment variables.
-
-**The log is public.** Anyone can read a public repo's Actions logs, so:
-
-- GitHub shows secrets as `***`.
-- The portal token is minted during the run, so GitHub doesn't know it as a secret. No script
-  prints it. As a backstop, `run_initial_upload.sh` (`maskToken`) asks GitHub to mask it. The mask
-  command goes to fd `ACTIONS_LOG_FD`, which the workflow opens on the runner's own output, so it
-  never lands in `run.log`, whose last lines are copied into `msg.md` on a failure.
-- Secrets are set on the run step only. Third-party actions are pinned to commit SHAs. Forks and
-  pull requests never get the secrets.
-- **Never add a `pull_request_target` trigger,** and never upload `runs/` as an artifact.
-
-**Limits:**
-
-- **GitHub turns off scheduled workflows in a public repo after 60 days without a commit.** If
-  Monday's Slack message doesn't come, check the Actions tab. If it shows the workflow as
-  disabled, click *Enable workflow*.
-- **PHAC geocoding:** the runner uses the `geocode_cache.json` committed in git. A city that isn't
-  in it yet is looked up on Nominatim on every run. The runner's updated cache is thrown away,
-  because the job can't write to the repo. To keep it, run the PHAC ETL locally now and then and
-  commit the cache.
-- The interactive tools (`run_edits.sh`, `--chunk`, `close_submission.sh`) still run locally from a
-  terminal.
-
-### On this PC
-
-**Windows Task Scheduler**. It works without a WSL window open, as
+**Windows Task Scheduler** (recommended on this machine). It works without a WSL window open, as
 long as the PC is on. Find your distro name with `wsl.exe -l -v`, then run this from Windows
 (PowerShell or cmd):
 
@@ -242,7 +169,7 @@ schtasks /Create /TN "iMicroSeq weekly ingestion" /SC WEEKLY /D MON /ST 09:00 ^
 
 **cron inside WSL.** This only fires while WSL is running. This WSL has no systemd, so the cron
 service has to be started after every WSL restart (`sudo service cron start`), unless systemd is
-enabled in `/etc/wsl.conf`. Step-by-step for operators: [SOP_weekly_upload.md](SOP_weekly_upload.md), Procedure J2.
+enabled in `/etc/wsl.conf`. Step-by-step for operators: [SOP_weekly_upload.md](SOP_weekly_upload.md), Procedure J.
 
 ```
 0 9 * * 1  /mnt/d/OneDrive/ProjectIngestion/run_weekly_update.sh >> /mnt/d/OneDrive/ProjectIngestion/runs/cron.log 2>&1
