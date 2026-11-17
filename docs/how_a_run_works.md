@@ -26,7 +26,10 @@ flowchart TD
 ```
 
 Each source's run gets its own folder, `runs/<YYYYmmdd-HHMMSS>/<SOURCE_ID>/`. A weekly run puts all
-its sources under one timestamp and adds `weekly.log`.
+its sources under one timestamp and adds `weekly.log`. A run on GitHub Actions makes the same
+folders on the runner, and they are discarded when it finishes. Its log is on the Actions run page,
+and its `msg.md` is on the run's summary page ([configuration.md](configuration.md), "Scheduling the
+weekly run").
 
 ## The steps in detail
 

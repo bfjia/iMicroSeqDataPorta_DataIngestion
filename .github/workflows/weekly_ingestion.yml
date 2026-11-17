@@ -1,0 +1,90 @@
+# Weekly iMicroSeq ingestion on GitHub Actions.
+#
+# This file only starts run_weekly_update.sh on a GitHub runner; all the logic
+# stays in the Bash and Python scripts. Nothing here commits (publishes) on the
+# portal: the run uploads and validates, and a person commits on the website.
+#
+#   schedule           every Monday, a REAL run against prod (uploads new
+#                      records + edits; MAX_NEW / MAX_EDITS still apply)
+#   Run workflow       by hand from the Actions tab, also prod; "dry run" is
+#                      ticked by default (everything except the upload)
+#
+# Prod only: this job gets only the prod login. Test uploads to dev are a
+# separate, manual-only workflow: dev_test.yml.
+#
+# Setup, secrets and limits: docs/configuration.md, "Scheduling the weekly run".
+# The repo is public, so this log is public: never print a credential, never
+# upload runs/ as an artifact, never add a pull_request_target trigger.
+
+name: Weekly ingestion
+
+on:
+  schedule:
+    # Cron is in UTC. 16:30 UTC = 08:30 Pacific in winter, 09:30 in summer.
+    # Not on the hour: GitHub delays (or drops) jobs at busy times.
+    - cron: "30 16 * * 1"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run on prod: every step except the upload, no Slack post"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One run at a time, across every trigger (runs/.lock only works on one machine).
+concurrency:
+  group: portal-ingestion
+  cancel-in-progress: false
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: portal           # holds the secrets; limit it to the main branch
+    defaults:
+      run:
+        shell: bash -el {0}       # -l activates the conda env set up below
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the ProjectIngestion conda env
+        uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
+        with:
+          miniforge-version: latest
+          environment-file: environment.yaml
+          activate-environment: ProjectIngestion
+
+      - name: Run the weekly update
+        env:
+          PORTAL_ENV: prod
+          EVENT: ${{ github.event_name }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          # Same names the scripts read from upload_workflow/.env. Prod login only.
+          prodPortalUser: ${{ secrets.PROD_PORTAL_USER }}
+          prodPortalPass: ${{ secrets.PROD_PORTAL_PASS }}
+          duoliauthtoken: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          args=(--env prod)
+          if [[ "${EVENT}" == workflow_dispatch && "${INPUT_DRY_RUN}" == true ]]; then
+              args+=(--dry-run)
+          fi
+          # fd 7 = the runner's own output, so run_initial_upload.sh can mask the
+          # portal token without the mask line landing in runs/ (see maskToken).
+          exec 7>&1
+          export ACTIONS_LOG_FD=7
+          echo "Running: ./run_weekly_update.sh ${args[*]}"
+          ./run_weekly_update.sh "${args[@]}"
+
+      - name: Show msg.md on the run page
+        if: always()
+        run: |
+          if [[ -f msg.md ]]; then
+              cat msg.md >> "${GITHUB_STEP_SUMMARY}"
+          else
+              echo "No msg.md (the run stopped before writing one; see the log above)." >> "${GITHUB_STEP_SUMMARY}"
+          fi

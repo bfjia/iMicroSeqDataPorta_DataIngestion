@@ -44,6 +44,9 @@ cat msg.md                          # what happened, and what to do next
 Then review and commit the upload on the website, using the link in `msg.md`. The full routine is
 in [docs/SOP_weekly_upload.md](docs/SOP_weekly_upload.md).
 
+You usually don't need to start it at all: **every Monday it runs by itself on GitHub, against
+prod**, and posts its message to Slack (SOP, Procedure J).
+
 ## What a run does
 
 1. **Checks** that nothing from an earlier run is still waiting on the portal. If something is,
@@ -62,6 +65,7 @@ Step-by-step detail is in [docs/how_a_run_works.md](docs/how_a_run_works.md).
 
 ```
 docs/                    procedures (SOPs) and technical guides
+.github/workflows/       on GitHub: the Monday prod run, and manual test runs on dev
 data_ETL/                one folder per data source (PHAC, plus _template to copy)
 upload_workflow/         the scripts that talk to the portal
 data_specification/      the iMicroSeq standard: fields and allowed values

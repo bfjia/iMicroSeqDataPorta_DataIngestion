@@ -1,0 +1,117 @@
+# Dev test runs on GitHub Actions: started by hand only, always against DEV.
+#
+# Separate from weekly_ingestion.yml (the Monday prod run). This job gets only
+# the dev login, so it cannot reach prod even by mistake. It uploads and
+# validates on dev for real unless "dry run" is ticked; nothing is ever
+# committed: a person commits on the dev website (or closes the submission
+# locally with close_submission.sh).
+#
+#   source        one data_ETL/ folder (run_initial_upload.sh, ignores ENABLED),
+#                 or ALL-ENABLED = run_weekly_update.sh on dev (only sources
+#                 enabled for dev in their source.conf; PHAC is ENABLED_DEV=0)
+#   holdout_*     TEST ONLY: hold back records so a later test has new ones
+#   force         upload even past MAX_NEW / MAX_EDITS
+#
+# Not here: --chunk and --edits-only ask on a terminal, so they stay local.
+# A new source has to be added to the "source" options below.
+# The repo is public, so this log is public: same rules as weekly_ingestion.yml.
+
+name: Dev test upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: "Source (ALL-ENABLED = the weekly run, on dev)"
+        type: choice
+        options: [PHAC, CHI, ALL-ENABLED]
+        default: PHAC
+      dry_run:
+        description: "Dry run: every step except the upload, no Slack post"
+        type: boolean
+        default: false
+      holdout_weeks:
+        description: "TEST: hold back the newest N weeks of new records (one source only)"
+        type: string
+        default: "0"
+      holdout_random:
+        description: "TEST: also hold back N random older new records (one source only)"
+        type: string
+        default: "0"
+      force:
+        description: "Upload even past MAX_NEW / MAX_EDITS (one source only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One dev test at a time: a second upload would append to the open submission.
+concurrency:
+  group: dev-test
+  cancel-in-progress: false
+
+jobs:
+  dev-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment: portal
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up the ProjectIngestion conda env
+        uses: conda-incubator/setup-miniconda@be893c923ea9cf1cf7cd510fbdde27c7e18cbdcb # v4.1.0
+        with:
+          miniforge-version: latest
+          environment-file: environment.yaml
+          activate-environment: ProjectIngestion
+
+      - name: Run on dev
+        env:
+          PORTAL_ENV: dev
+          SOURCE: ${{ inputs.source }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          HOLDOUT_WEEKS: ${{ inputs.holdout_weeks }}
+          HOLDOUT_RANDOM: ${{ inputs.holdout_random }}
+          FORCE: ${{ inputs.force }}
+          # Dev login only: no prod secrets in this job.
+          devPortalUser: ${{ secrets.DEV_PORTAL_USER }}
+          devPortalPass: ${{ secrets.DEV_PORTAL_PASS }}
+          duoliauthtoken: ${{ secrets.SLACK_BOT_TOKEN }}
+        run: |
+          for n in "${HOLDOUT_WEEKS}" "${HOLDOUT_RANDOM}"; do
+              [[ "${n}" =~ ^[0-9]+$ ]] || { echo "ERROR: holdout values must be whole numbers (got '${n}')" >&2; exit 2; }
+          done
+          if [[ "${SOURCE}" == ALL-ENABLED ]]; then
+              if [[ "${HOLDOUT_WEEKS}" != 0 || "${HOLDOUT_RANDOM}" != 0 || "${FORCE}" == true ]]; then
+                  echo "ERROR: holdout and force work for one source only; pick a source instead of ALL-ENABLED" >&2
+                  exit 2
+              fi
+              cmd=(./run_weekly_update.sh --env dev)
+          else
+              cmd=(./run_initial_upload.sh "${SOURCE}" --env dev)
+              [[ "${HOLDOUT_WEEKS}" != 0 ]] && cmd+=(--holdout-weeks "${HOLDOUT_WEEKS}")
+              [[ "${HOLDOUT_RANDOM}" != 0 ]] && cmd+=(--holdout-random "${HOLDOUT_RANDOM}")
+              [[ "${FORCE}" == true ]] && cmd+=(--force)
+          fi
+          [[ "${DRY_RUN}" == true ]] && cmd+=(--dry-run)
+          # fd 7 = the runner's own output, for maskToken in run_initial_upload.sh.
+          exec 7>&1
+          export ACTIONS_LOG_FD=7
+          echo "Running: ${cmd[*]}"
+          "${cmd[@]}"
+
+      - name: Show msg.md on the run page
+        if: always()
+        run: |
+          if [[ -f msg.md ]]; then
+              cat msg.md >> "${GITHUB_STEP_SUMMARY}"
+          else
+              echo "No msg.md (the run stopped before writing one; see the log above)." >> "${GITHUB_STEP_SUMMARY}"
+          fi

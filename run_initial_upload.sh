@@ -199,6 +199,17 @@ exec > >(tee -a "${LOG}") 2>&1
 setStatus() { printf '%s=%s\n' "$1" "${2//$'\n'/ }" >> "${STATUS_FILE}"; }
 kv() { local s=" $2 "; s="${s#* $1=}"; echo "${s%% *}"; }   # kv new "new=3 changed=0" -> 3
 
+# On GitHub Actions the log is public. Nothing prints the portal token, but in
+# case something ever does, tell GitHub to show it as ***. The workflow opens
+# ACTIONS_LOG_FD on the runner's own output, past this script's tee: the mask
+# line must not land in run.log, whose last lines go into msg.md on a failure.
+# Elsewhere ACTIONS_LOG_FD is unset and this does nothing.
+maskToken() {
+    if [[ "${ACTIONS_LOG_FD:-}" =~ ^[0-9]+$ ]] && { : >&"${ACTIONS_LOG_FD}"; } 2>/dev/null; then
+        echo "::add-mask::${PORTAL_TOKEN}" >&"${ACTIONS_LOG_FD}"
+    fi
+}
+
 STEP="start-up"
 FINAL=""
 finish() {             # finish <status> <exit code>
@@ -267,6 +278,7 @@ echo "[1/7] Pending check"
 echo "      Logging in to the ${PORTAL_ENV} portal"
 PORTAL_TOKEN="$(python "${UPLOAD_DIR}/step1_token.py")" \
     || fail "Could not log in to the ${PORTAL_ENV} portal. Check ${PORTAL_ENV}PortalUser and ${PORTAL_ENV}PortalPass in upload_workflow/.env."
+maskToken
 export PORTAL_TOKEN
 
 STEP="pending check"
@@ -456,6 +468,7 @@ fi
 freshToken() {   # tokens expire (3 h on dev), and a chunked load or a prompt can wait longer
     PORTAL_TOKEN="$(python "${UPLOAD_DIR}/step1_token.py")" \
         || fail "Could not log in to the ${PORTAL_ENV} portal again."
+    maskToken
     export PORTAL_TOKEN
 }
 
