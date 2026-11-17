@@ -2,7 +2,11 @@
 
 Nothing is published here. The service stages the records, hands back a
 submissionId, and starts validating in the background -- step 6 waits for that
-to finish, step 7 publishes.
+to finish. A person commits the submission on the website.
+
+Two kinds of upload go into the same open submission:
+  * new records:  POST /submission/category/{id}/data   (uploadSubmission)
+  * edits to published records:  PUT /submission/category/{id}/data   (uploadEdits)
 """
 
 import json
@@ -10,7 +14,7 @@ import os
 
 import requests
 
-from common import apiGet, apiPost, buildParser, resolveToken
+from common import apiGet, apiPost, apiPut, buildParser, resolveToken
 
 
 def findActiveSubmission(baseUrl, token, categoryId, organization):
@@ -52,16 +56,45 @@ def uploadSubmission(baseUrl, token, categoryId, entityName, organization, fileP
     fails validation on duplicate IDs, so callers should clear an open
     submission first -- see findActiveSubmission and closeSubmission.
     """
+    with open(filePath, "rb") as handle:
+        return sendFile(
+            apiPost, baseUrl, token, categoryId, organization, "Uploading submission",
+            files={"submissionFile": (os.path.basename(filePath), handle, "text/csv")},
+            data={"entityName": entityName, "organization": organization},
+        )
+
+
+def uploadEdits(baseUrl, token, categoryId, organization, filePath):
+    """PUT ``filePath`` as edits to published records. Returns (submissionId, result).
+
+    The rows are staged as "updates" in the organization's open submission (a
+    new one if none is open), next to any new records uploaded before them.
+    Each row names its record in a ``systemId`` column and replaces that record
+    whole, so it carries every field. Nothing changes until a person commits
+    the submission on the website.
+
+    The request has no entity name, so the file must be named after the entity
+    (``sample.csv``, as step4_transform.transformCsv writes it).
+
+    Added to an already open submission, the portal answers ``PROCESSING``
+    without the submission's number, so the ID returned may be None; the
+    caller looks the open submission up. Don't send edits while that
+    submission is still validating: the portal accepts them but never stages
+    them (dev, 2026-11-05). main.py waits for validation first.
+    """
+    with open(filePath, "rb") as handle:
+        return sendFile(
+            apiPut, baseUrl, token, categoryId, organization, "Uploading edits",
+            requireId=False,
+            files={"files": (os.path.basename(filePath), handle, "text/csv")},
+            data={"organization": organization},
+        )
+
+
+def sendFile(call, baseUrl, token, categoryId, organization, action, requireId=True, **kwargs):
+    """Send one file to /submission/category/{id}/data and check the answer."""
     try:
-        with open(filePath, "rb") as handle:
-            response = apiPost(
-                baseUrl,
-                f"/submission/category/{categoryId}/data",
-                token,
-                "Uploading submission",
-                files={"submissionFile": (os.path.basename(filePath), handle, "text/csv")},
-                data={"entityName": entityName, "organization": organization},
-            )
+        response = call(baseUrl, f"/submission/category/{categoryId}/data", token, action, **kwargs)
     except RuntimeError as error:
         # The common case, and not something the caller can fix by retrying:
         # the account has no write access for this organization.
@@ -82,8 +115,8 @@ def uploadSubmission(baseUrl, token, categoryId, entityName, organization, fileP
         raise RuntimeError(f"The service rejected the file outright:\n{errors}")
 
     submissionId = result.get("submissionId")
-    if not submissionId:
-        raise RuntimeError(f"Upload returned no submissionId:\n{json.dumps(result, indent=2)}")
+    if not submissionId and requireId:
+        raise RuntimeError(f"{action} returned no submissionId:\n{json.dumps(result, indent=2)}")
 
     return submissionId, result
 

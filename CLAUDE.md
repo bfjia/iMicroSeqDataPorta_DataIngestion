@@ -55,7 +55,8 @@ its ETL ready but no portal organization yet.
 ```
 docs/                  SOPs (weekly upload, new source) + technical guides (how a run works, configuration)
 run_weekly_update.sh   scheduler entry point: every enabled source, then one msg.md
-run_initial_upload.sh  one source: pending check -> ETL -> window -> snapshot -> diff -> guard -> upload (--chunk: first loads)
+run_initial_upload.sh  one source: pending check -> ETL -> window -> snapshot -> diff -> guard -> upload new + edits (--chunk: first loads)
+run_edits.sh           one source, edits only: shows the revised published records, asks, sends them (run_initial_upload.sh --edits-only)
 close_submission.sh    discard a source's open submission (asks for its number) so a new one can start
 list_sources.sh        each source's organization/category per portal; --check logs in and checks WRITE
 pipeline.conf          PORTAL_ENV (default portal), DEV_/PROD_MIN_START_DATE, DEFAULT_MAX_NEW, SLACK_CHANNEL
@@ -85,6 +86,11 @@ is published. Each run downloads the org's published records from the portal
 submission (`check_pending.py`, which needs a token: the listing is per logged-in user). If one
 exists, the run stops before doing any work and reminds the person to commit or fix it.
 
+Records that are published but whose values the source has changed since ("changed") are sent as
+**edits** in the same submission as the new records (`build_edits.py` → `main.py --edits`), unless
+the source sets `EDIT_REVISED=0`. More than `MAX_EDITS` stops the run with an error
+(`edit_guard`). Edits, like new records, change nothing until a person commits on the website.
+
 ## Running
 
 ```bash
@@ -93,6 +99,7 @@ conda activate ProjectIngestion
 ./run_weekly_update.sh --dry-run
 ./run_weekly_update.sh --env prod --dry-run     # the same against prod (reads only)
 ./run_initial_upload.sh PHAC --env prod --chunk # first load in chunks (asks before each)
+./run_edits.sh PHAC --dry-run                   # edits only: what would be edited (asks before sending)
 bash data_ETL/PHAC/etl.sh                       # ETL only
 ```
 
@@ -111,6 +118,14 @@ bash data_ETL/PHAC/etl.sh                       # ETL only
   mint a fresh one after a permission change (`python upload_workflow/step1_token.py --scopes`).
 - **`GET /submission/{id}` is a server-sent event stream**, not JSON, and is held open while
   validating. Use `common.apiGetEvent`.
+- **Edits:** `PUT /submission/category/{id}/data` with `files` (named `sample.csv`) and
+  `organization`. Each row has a `systemId` column plus every field; an edit replaces the whole
+  record. Staged as `updates` in the open submission; the website shows old → new and commits
+  them like new records. Confirmed on dev 2026-11-05 (461: edits alone; 463: 223 new + 69 edits).
+  **Send edits only after the new records have validated:** edits sent while the submission is
+  still validating are answered `PROCESSING` and then silently dropped. Added to an open
+  submission, the PUT reply has no `submissionId`. `main.py` waits, then checks the staged counts.
+  A website upload closes the user's own open submission first (the API appends instead).
 - **Uploading to an open submission appends to it**, so the same records get staged twice
   (`INVALID_BY_UNIQUE`). The pending check exists for this reason.
 - **Sample IDs must be unique against published data**, not just within the file.
@@ -130,4 +145,8 @@ bash data_ETL/PHAC/etl.sh                       # ETL only
   on 2026-11-04). The improvements agreed since (null reasons, "Banff WWTP") mean every existing
   record is reported as revised on each run, by the owner's choice. See `data_ETL/CHI/README.md`,
   including its two known issues (CHI recalculates COVID values; new copies cause duplicate uploads).
+- **Edits on prod:** on by default, as on dev (`DEFAULT_EDIT_REVISED=1`). Prod dry runs on
+  2026-11-05 (reads only) found PHAC-NWMP 0 new and 69 edits, matched to prod's own system IDs.
+  No edit has been sent to prod yet; the first goes with the next prod run
+  (`./run_weekly_update.sh --env prod`, or `./run_edits.sh PHAC --env prod`, which asks first).
 - Commits stay manual on the website.

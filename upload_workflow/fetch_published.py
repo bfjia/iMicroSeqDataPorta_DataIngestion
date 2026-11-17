@@ -17,7 +17,13 @@ How portal values are turned back into CSV text:
 An organization with nothing published (the portal answers 404 "No Submitted
 data found") gives a header-only CSV, i.e. every record is new.
 
+``--ids-out`` also writes ``specimen collector sample ID,systemId`` for every
+record. The system ID is the portal's own record ID; editing a published record
+needs it (build_edits.py).
+
     python fetch_published.py --organization PHAC-AUTOINGEST --output published.csv
+    python fetch_published.py --organization PHAC-AUTOINGEST --output published.csv \\
+        --ids-out published_ids.csv
 """
 
 import csv
@@ -31,6 +37,8 @@ from step2_category import resolveCategory
 from step3_dictionary import fetchDictionary, selectSchema
 
 DefaultPageSize = 1000
+IdColumn = "specimen collector sample ID"
+SystemIdColumn = "systemId"
 
 
 def fetchPage(baseUrl, token, categoryId, organization, page, pageSize):
@@ -58,8 +66,12 @@ def cellText(value, delimiter):
 
 
 def fetchPublished(baseUrl, token, category, organization, entityName=None,
-                   pageSize=DefaultPageSize):
-    """Return (columns, rows) for everything ``organization`` has published."""
+                   pageSize=DefaultPageSize, ids=None):
+    """Return (columns, rows) for everything ``organization`` has published.
+
+    If ``ids`` is a list, (sample ID, system ID) is appended to it for every
+    record: the system ID is the portal's own record ID, which edits need.
+    """
     categoryId = resolveCategory(baseUrl, token, category)
     schema = selectSchema(fetchDictionary(baseUrl, token, categoryId), entityName)
 
@@ -90,6 +102,8 @@ def fetchPublished(baseUrl, token, category, organization, entityName=None,
                 title, delimiter = fields[name]
                 row[title] = cellText(value, delimiter)
             rows.append(row)
+            if ids is not None:
+                ids.append((row.get(IdColumn, ""), record.get("systemId", "")))
         totalPages = (result.get("pagination") or {}).get("totalPages") or 0
         if page >= totalPages:
             break
@@ -113,12 +127,19 @@ if __name__ == "__main__":
     parser.add_argument("--entity", default=None, help="Entity name. Defaults to the only schema.")
     parser.add_argument("--output", required=True, help="Where to write the baseline CSV")
     parser.add_argument("--page-size", type=int, default=DefaultPageSize, help="Records per request")
+    parser.add_argument("--ids-out", default=None,
+                        help="Also write each record's sample ID and system ID here (for edits)")
     args = parser.parse_args()
 
     egoToken = resolveToken(args.token)
+    ids = [] if args.ids_out else None
     cols, published = fetchPublished(
-        args.base_url, egoToken, args.category, args.organization, args.entity, args.page_size
+        args.base_url, egoToken, args.category, args.organization, args.entity, args.page_size,
+        ids=ids,
     )
     writeCsv(args.output, cols, published)
+    if args.ids_out:
+        writeCsv(args.ids_out, [IdColumn, SystemIdColumn],
+                 [{IdColumn: sample, SystemIdColumn: system} for sample, system in ids])
     print(json.dumps({"organization": args.organization, "published": len(published),
                       "output": args.output}))

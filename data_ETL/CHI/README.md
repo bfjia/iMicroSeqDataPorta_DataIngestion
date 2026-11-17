@@ -106,11 +106,12 @@ the new-source SOP continues at Step 7 (dry run on dev).
 | Sample dates after 2025-12-18 | 1,447 | uploaded (new) |
 | The 15 duplicate pairs, as `_1`/`_2` | 30 | uploaded. 13 pairs are on prod once already, under the plain ID (the last copy), so one of each pair repeats a published record. |
 | Influenza/RSV whose sample date CHI has moved by up to 3 days | 11 | uploaded under the new date; the old date stays on prod |
-| Same ID on both | 26,588 | reported as revised on every run, never re-uploaded. All of them differ in the improvements made since: `sample collection data steward name`, three null-reason fields, and `Banff WWTP` (prod: `BanffWWTP`); the 1,936 post-2023 COVID records also in the `specimen processing details` note. 1,857 also have values CHI has since revised. |
+| Same ID on both | 26,588 | sent as edits to the published records. That's more than `MAX_EDITS` (2,000), so a normal run stops with an error; send them once with `./run_edits.sh CHI --env prod` (it asks first). All of them differ in the improvements made since: `sample collection data steward name`, three null-reason fields, and `Banff WWTP` (prod: `BanffWWTP`); the 1,936 post-2023 COVID records also in the `specimen processing details` note. 1,857 also have values CHI has since revised. |
 | On prod but not in today's file | 93 | left alone: mostly the 60 pre-2023 July 2023 copies (the post-2023 file wins) and the plain IDs of the duplicate pairs |
 
-So the weekly message for CHI on prod will always show about 26,600 revised records. Records
-published before this pipeline keep their old values; new ones get the improvements.
+Once those edits are committed, the earlier records carry the same values as new ones, and
+weekly runs only send what CHI changes. (The hand-made files in `runs/chi-prod-sync/` from
+2026-11-04 aren't needed any more: `run_edits.sh` builds the same edits from fresh data.)
 
 ## Known issues (not fixed yet)
 
@@ -121,10 +122,10 @@ left as they are for now.
    CHI revises them across the whole history, not just recent weeks. Between the morning and
    midday of 2026-11-04, 1,795 records already on prod (dated 2023-07-02 to 2025-12-16) changed
    slightly, e.g. `Banff_2023-07-03_covid` N1 0.0478 → 0.0477.
-   - Weekly runs report these as revised and never re-upload them, so prod keeps the older values.
-   - Any file made to update the prod records goes stale as soon as CHI recalculates. Rebuild it
-     from a fresh ETL run right before it's applied (it is today's `CHI.csv` rows for the sample
-     IDs already on prod).
+   - Weekly runs now send these as edits (since 2026-11-05), so prod follows CHI's values. Each
+     recalculation means a submission with many edits to review.
+   - About 1,800 at once is close to `MAX_EDITS` (2,000). A bigger recalculation stops the run
+     with an error; send it with `./run_edits.sh CHI`, or raise `MAX_EDITS` in `source.conf`.
 2. **A new copy of an already-published record causes a duplicate upload.** The duplicates rule
    numbers every differing copy (`_1`, `_2`). When CHI adds a second copy for a site and date that
    is already on prod under the plain ID, the plain ID disappears from `CHI.csv` and both copies

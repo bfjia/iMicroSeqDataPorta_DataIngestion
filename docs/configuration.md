@@ -9,6 +9,7 @@ Reference for running the pipeline: every command and option, the settings files
 
 ```
 ./run_initial_upload.sh <SOURCE> [--env dev|prod] [--dry-run] [--force] [--chunk] [--holdout-weeks N] [--holdout-random N] [--keep-work]
+./run_edits.sh <SOURCE> [--env dev|prod] [--dry-run] [--keep-work]
 ./run_weekly_update.sh [--env dev|prod] [--dry-run]
 ./close_submission.sh <SOURCE> [--env dev|prod] [--yes]
 ./list_sources.sh [--check]
@@ -18,13 +19,27 @@ Reference for running the pipeline: every command and option, the settings files
 |---|---|
 | `--env dev\|prod` | Which portal. Without it, `PORTAL_ENV` in `pipeline.conf` (dev). |
 | `--dry-run` | Every step except the upload. It still logs in and reads from the portal. |
-| `--force` | Upload even if new > `MAX_NEW` (first loads, known backfills) |
+| `--force` | Upload even if new > `MAX_NEW` or edits > `MAX_EDITS` (first loads, known backfills) |
+| `--edits-only` | Send only the edits, after showing them and asking. What `run_edits.sh` runs; not combined with `--chunk`, `--force` or `--holdout-*`. |
 | `--chunk` | **First loads.** Upload in chunks of `CHUNK_SIZE` (10,000), one submission each, and ask before every chunk. Not limited by `MAX_NEW`. Needs a terminal. See below. |
 | `--holdout-weeks N` / `--holdout-random N` | TEST ONLY: hold back rows to create a delta for the next run |
 | `--keep-work` | Keep `in_scope.csv`, `published.csv` and `submit/` |
 
 `run_initial_upload.sh` runs one source. Use it for a source's first load and for one-off runs.
-`run_weekly_update.sh` calls it for every enabled source.
+`run_weekly_update.sh` calls it for every enabled source. Each run sends the new records **and**
+edits for published records the source has revised, in one submission (unless the source sets
+`EDIT_REVISED=0`).
+
+**`run_edits.sh`** sends only the edits: published records whose values the source has changed.
+It runs the usual pending check, ETL, window, snapshot and comparison, then shows how many records
+change, which fields, and a few sample IDs, and asks: type `yes` to send, `stop` to end with
+nothing sent. Needs a terminal (except `--dry-run`). Not limited by `MAX_EDITS`, because a person
+approves. New records are left for the weekly run. It's `run_initial_upload.sh --edits-only`.
+
+```bash
+./run_edits.sh PHAC --dry-run   # what would be edited; sends nothing
+./run_edits.sh PHAC             # show, ask, send
+```
 
 **`--chunk`** splits a big first load into submissions of at most `CHUNK_SIZE` records:
 
@@ -73,6 +88,8 @@ only way short of `main.py --replace`.
 | `DEV_MIN_START_DATE` | `2026-09-01` | Dev: only weeks on or after this date are uploaded. `""` = no cutoff. |
 | `PROD_MIN_START_DATE` | `""` | Prod: the same, empty = full history |
 | `DEFAULT_MAX_NEW` | `2500` | Size guard for sources that don't set `MAX_NEW` |
+| `DEFAULT_EDIT_REVISED` | `1` | `1` = send revised published records as edits, in the same submission as the new records; `0` = only report them |
+| `DEFAULT_MAX_EDITS` | `2000` | Edit guard for sources that don't set `MAX_EDITS`: more revised records than this stops the run with an error (`edit_guard`) |
 | `CHUNK_SIZE` | `10000` | Most records per submission with `--chunk` |
 | `SLACK_CHANNEL` | `C0CDQRKNWFK` | Slack channel ID that gets `msg.md` after each run (#_integration_notifications). `""` = don't post. |
 
@@ -86,8 +103,10 @@ only way short of `main.py --replace`.
 | `UPLOAD_CSV` | `curated/PHAC-NWMP.dedup.csv` | What `etl.sh` writes, relative to the source folder |
 | `MAX_NEW` | `500` | Size guard |
 | `ENABLED` | `1`, with `ENABLED_DEV=0` (PHAC is off on dev) | `0` = `run_weekly_update.sh` skips the source |
+| `EDIT_REVISED` | not set (uses `DEFAULT_EDIT_REVISED`, 1) | `0` = this source doesn't send edits; revised records are only reported |
+| `MAX_EDITS` | not set (uses `DEFAULT_MAX_EDITS`, 2,000) | Edit guard for this source |
 
-`CATEGORY`, `MAX_NEW` and `ENABLED` can also be given per portal with a `_DEV` or `_PROD` suffix.
+`CATEGORY`, `MAX_NEW`, `ENABLED`, `EDIT_REVISED` and `MAX_EDITS` can also be given per portal with a `_DEV` or `_PROD` suffix.
 The suffixed key wins on that portal, e.g. `ENABLED_PROD=0` keeps a new source on dev only.
 `upload_workflow/load_source_conf.sh` applies these rules for every script.
 

@@ -16,8 +16,11 @@ import os
 from common import DefaultCategory, buildParser, resolveToken
 
 
-def transformCsv(inputPath, headerMap, entityName, outputDir):
+def transformCsv(inputPath, headerMap, entityName, outputDir, passthrough=()):
     """Write ``inputPath`` with renamed headers into ``outputDir``.
+
+    Columns named in ``passthrough`` are kept as they are rather than rejected:
+    edits carry a ``systemId`` column, which isn't a dictionary field.
 
     Returns (outputPath, rowCount).
     """
@@ -28,7 +31,7 @@ def transformCsv(inputPath, headerMap, entityName, outputDir):
         except StopIteration:
             raise RuntimeError(f"{inputPath} is empty")
 
-        unmapped = [h for h in headers if h not in headerMap]
+        unmapped = [h for h in headers if h not in headerMap and h not in passthrough]
         if unmapped:
             raise RuntimeError(
                 f"{len(unmapped)} column(s) in {os.path.basename(inputPath)} are not in the "
@@ -41,7 +44,7 @@ def transformCsv(inputPath, headerMap, entityName, outputDir):
         rowCount = 0
         with open(outputPath, "w", newline="", encoding="utf-8") as outHandle:
             writer = csv.writer(outHandle)
-            writer.writerow([headerMap[h] for h in headers])
+            writer.writerow([h if h in passthrough else headerMap[h] for h in headers])
             for row in reader:
                 writer.writerow(row)
                 rowCount += 1

@@ -26,7 +26,9 @@ are two portals, and `$PORTAL_ENV` picks one (`dev` when unset; see `portal_env.
 Both use the same dictionary (`imicroseq_wastewater` v1.17). Lyric's API docs are only readable
 at `/api-docs/swagger-ui-init.js`. A submission goes through three phases:
 
-1. **Upload:** the file is staged into a *submission* and validated in the background.
+1. **Upload:** the file is staged into a *submission* and validated in the background. A
+   submission holds new records (*inserts*, `POST …/data`), edits to published records
+   (*updates*, `PUT …/data`) and deletions together; this pipeline sends the first two.
 2. **Validate:** the submission settles on `VALID` or `INVALID`. Nothing is public yet.
 3. **Commit:** the records are published. **This happens on the website, by a person.**
 
@@ -52,10 +54,10 @@ them from anywhere with the `ProjectIngestion` env active, e.g.
 | `step1_token.py` | Wraps `getToken.py`. `--scopes` prints the token's permissions. | (as above) | `python step1_token.py --scopes` |
 | `step2_category.py` | Turns a category name into its numeric id | `GET /category`, `GET /category/{id}` | `python step2_category.py --category imicroseq_wastewater` |
 | `step3_dictionary.py` | Fetches the dictionary and builds the map from CSV title to field name | `GET /dictionary/category/{id}` | `python step3_dictionary.py --category-id 3` |
-| `step4_transform.py` | Renames the CSV headers to field names, writing `sample.csv`. An unknown column is a hard error. | dictionary only | `python step4_transform.py --input delta.csv --output-dir out/` |
-| `step5_upload.py` | Uploads a file, opening a submission. `--replace` discards an open one first. | `GET /submission/category/{id}?onlyActive=true`, `DELETE /submission/{id}`, `POST /submission/category/{id}/data` | (normally via `main.py`) |
+| `step4_transform.py` | Renames the CSV headers to field names, writing `sample.csv`. An unknown column is a hard error, except columns named in `passthrough` (edits keep `systemId`). | dictionary only | `python step4_transform.py --input delta.csv --output-dir out/` |
+| `step5_upload.py` | Uploads a file, opening a submission. `uploadSubmission` sends new records; `uploadEdits` sends edits (rows with `systemId`) into the same open submission. `--replace` discards an open one first. | `GET /submission/category/{id}?onlyActive=true`, `DELETE /submission/{id}`, `POST /submission/category/{id}/data`, `PUT /submission/category/{id}/data` | (normally via `main.py`) |
 | `step6_validate.py` | Polls until validation settles. `--details` prints per-record errors. | `GET /submission/{id}` (event stream), `GET /submission/{id}/details` | `python step6_validate.py --submission-id <number> --details` |
-| `main.py` | Runs steps 1–6 and stops. On VALID it prints the website link to commit. On INVALID it prints the link to the errors. `--result-json` writes the outcome for scripts. | all of the above | `python main.py --input delta.csv --organization PHAC-AUTOINGEST` |
+| `main.py` | Runs steps 1–6 and stops. `--input` (new records) and/or `--edits` (from `build_edits.py`) go into **one** submission, new records first. On VALID it prints the website link to commit. On INVALID it prints the link to the errors. `--result-json` writes the outcome for scripts (`rows`, `edits`). | all of the above | `python main.py --input delta.csv --edits edits.csv --organization PHAC-AUTOINGEST` |
 | `common.py` | Shared HTTP, polling and token helpers. `PortalEnv`, `DefaultBaseURL`, `DefaultPortalURL` and `DefaultCategory` come from `portal_env.py`. | | |
 
 `main.py` refuses to upload if a submission is already open for the organization. Passing
@@ -68,11 +70,12 @@ submission. Without `--work-dir`, its working files go in `runs/main-<timestamp>
 |---|---|---|---|
 | `check_pending.py` | 1 | Is a submission still open for the org? Also reports whether the token has the org's write scope. Prints `KEY=VALUE` (or `--json`). It needs a real token, because the listing is per logged-in user. | `python check_pending.py --organization PHAC-AUTOINGEST` |
 | `filter_rows.py` | 3 | Keeps rows with `sample collection start date` ≥ the cutoff and drops undated rows while a cutoff is set. Prints `kept= before_cutoff= undated=`. | `python filter_rows.py --input a.csv --output b.csv --min-start-date 2026-09-01` |
-| `fetch_published.py` | 4 | Downloads the org's published records as a CSV with the curated column titles. Lists are joined with each field's delimiter, and omitted fields become empty. A 404 "No Submitted data found" gives a header-only CSV. | `python fetch_published.py --organization PHAC-AUTOINGEST --output published.csv` |
+| `fetch_published.py` | 4 | Downloads the org's published records as a CSV with the curated column titles. Lists are joined with each field's delimiter, and omitted fields become empty. A 404 "No Submitted data found" gives a header-only CSV. `--ids-out` also writes each record's sample ID and system ID. | `python fetch_published.py --organization PHAC-AUTOINGEST --output published.csv --ids-out published_ids.csv` |
 | `diff_new_records.py` | 5 | Splits the curated rows into new / changed / unchanged against the published snapshot. Numbers are compared numerically (rel. 1e-6). A duplicate sample ID is a hard error. Prints `new= changed= unchanged=`. | `python diff_new_records.py --new a.csv --baseline published.csv --new-out delta.csv --changed-out changed.csv` |
+| `build_edits.py` | 5 | Turns `changed.csv` into `edits.csv`: adds each record's `systemId` (error if one is missing), keeps every field. `--fields-out` writes per-field counts with an example. Prints the counts, then `edits=`. | `python build_edits.py --changed changed.csv --ids published_ids.csv --published published.csv --output edits.csv --fields-out edit_fields.csv` |
 | `holdout_rows.py` | 5 | **Test only.** Holds back the newest N weeks plus N random older rows, to create a delta for the next run | `python holdout_rows.py --input delta.csv --output kept.csv --held-out held.csv --latest-weeks 1 --random 10` |
 | `close_submission.py` | — | Discards the org's open submission so a new one can start (used by `../close_submission.sh`). Shows it, then asks for its number unless `--yes`. Re-checks that it's gone. Never touches published records. | `python close_submission.py --organization PHAC-AUTOINGEST` |
-| `load_source_conf.sh` | — | Bash, sourced by the run scripts and `../list_sources.sh`. `loadSourceConf <dir> <dev\|prod>` reads a `source.conf` for one portal: `ORGANIZATION_<ENV>` (required), plus `_DEV`/`_PROD` overrides for `CATEGORY`, `MAX_NEW`, `ENABLED`. `checkSourceConf` reports what's missing. | `source load_source_conf.sh; loadSourceConf ../data_ETL/PHAC prod` |
+| `load_source_conf.sh` | — | Bash, sourced by the run scripts and `../list_sources.sh`. `loadSourceConf <dir> <dev\|prod>` reads a `source.conf` for one portal: `ORGANIZATION_<ENV>` (required), plus `_DEV`/`_PROD` overrides for `CATEGORY`, `MAX_NEW`, `ENABLED`, `EDIT_REVISED`, `MAX_EDITS`. `checkSourceConf` reports what's missing. | `source load_source_conf.sh; loadSourceConf ../data_ETL/PHAC prod` |
 | `chunk_rows.py` | 6 | `--chunk` only: sorts the new records oldest first and cuts them into `chunk_NN.csv` files of at most `--size` rows. Prints `chunk=N rows= first= last= file=` lines and `chunks= rows=`. | `python chunk_rows.py --input delta.csv --size 10000 --out-dir chunks/` |
 | `notify.py` | 8 | Builds the run's single `msg.md` digest from each source's `status.env` | `python notify.py --run-dir runs/<stamp> --out msg.md` |
 | `slack_post.py` | 8 | Posts `msg.md` to Slack (`chat.postMessage`) after converting it to Slack markdown. Token: `duoliauthtoken` in `.env`; the bot must be in the channel. `--print` shows the text and sends nothing. Modeled on `old/duoli.py`. | `python slack_post.py --file ../msg.md --channel C0123456789` |
@@ -104,6 +107,23 @@ user's submissions. An anonymous call returns an empty list even when something 
 **Column names come from the live dictionary.** The CSVs use readable titles
 (`INSDC Project accession`). The API wants field names (`insdc_project_accession`). The map is
 fetched at every run, so a dictionary version bump shows up as a clear error.
+
+**Edits name records by system ID and replace them whole.** `PUT /submission/category/{id}/data`
+takes `files` (a file named after the entity, `sample.csv`) and `organization`, no entity name.
+Each row carries a `systemId` column (the portal's record ID, from `/data/...` records) plus
+every field: dev's one earlier edit blanked the fields its file left out. The rows are staged as
+`updates` in the org's open submission, next to any inserts, and change nothing until a commit.
+Confirmed on dev 2026-11-05 (submission 461: 69 updates; 463: 223 inserts + 69 updates, VALID).
+
+**Edits sent while a submission is validating are dropped.** The PUT is answered `PROCESSING` (with
+no `submissionId` when it joins an open submission), but if the new records are still being
+validated, the edits are never staged and nothing says so. `main.py` waits for validation before
+sending edits, and afterwards checks that the submission's insert and update counts match what was
+sent (`INCOMPLETE_SUBMISSION` otherwise).
+
+**A website upload closes your open submission first.** The website's upload deletes the
+logged-in user's open submission for that organization before posting, so it would throw away
+staged edits. The API (this pipeline) adds to it instead.
 
 **Reads are open, writes are not.** `/data/…`, `/dictionary/…` and `/category` work without a
 token. Uploads (and the per-user listing) need one.

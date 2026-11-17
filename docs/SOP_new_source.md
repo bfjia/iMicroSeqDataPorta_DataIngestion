@@ -165,6 +165,11 @@ CATEGORY_PROD="imicroseq_environmental"   # leave as is for wastewater data
   ~215 a week and uses 500). The first load is allowed past it with `--force`.
 - **Categories.** Leave them as they are for wastewater data. The two portals call the same
   category by different names.
+- **Edits (optional).** When the source revises records that are already published, each run
+  sends those as edits, in the same submission as the new records. That's on by default. To only
+  report them instead, add `EDIT_REVISED=0`. A run that finds more revised records than
+  `MAX_EDITS` (default 2,000) stops with an error; add `MAX_EDITS=…` to change the limit for this
+  source.
 
 ## Step 5. Get write permission on both portals
 
@@ -244,8 +249,8 @@ window (weeks from 2026-09-01), and the comparison with what's already published
 
 | `msg.md` says | Means | Do this |
 |---|---|---|
-| 🟢 *dry run: N new records … would be uploaded* | It works | Open the `delta.csv` it names and spot-check a few rows. Go to Step 8. |
-| 🔴 *stopped: N new records is over the limit* | More than `MAX_NEW`, which is normal for a first load | Run `./run_initial_upload.sh <NAME> --dry-run --force` to see the full count |
+| 🟢 *dry run, nothing sent* with a *New: N records* line | It works | Open the `delta.csv` it names and spot-check a few rows. Go to Step 8. |
+| 🔴 *stopped: too many new records* | More than `MAX_NEW`, which is normal for a first load | Run `./run_initial_upload.sh <NAME> --dry-run --force` to see the full count |
 | 🔴 *run failed during ETL* | `etl.sh` stopped with an error | Open the `Log:` file, fix it, repeat Step 6 |
 | 🔴 *run failed during diff* | Duplicate sample IDs | Step 3 |
 | 🔴 *run failed during date window* | No records from 2026-09-01 on | Check the dates the converter writes in `sample collection start date` (YYYY-MM-DD) |
@@ -292,11 +297,11 @@ After the commit, run another dry run:
 ./run_initial_upload.sh <NAME> --dry-run
 ```
 
-It must say 🟢 *nothing new (N records checked)*. That proves the sample IDs are stable and the
+It must say 🟢 *nothing new* (*N records checked*). That proves the sample IDs are stable and the
 published records match what was sent.
 
-If it finds new records again, or many *revised values* FYIs, something in the IDs or values
-changes from run to run. Fix it before going on (Step 2).
+If it finds new records again, or edits for records you just committed, something in the IDs or
+values changes from run to run. Fix it before going on (Step 2).
 
 ## Step 10. Turn on weekly runs for dev
 
@@ -343,7 +348,7 @@ Prod has **no date window**, so it gets the source's full history.
 
    It must say 🟢 *nothing new*.
 
-If a prod run stops with *still waiting for your commit* for a submission you don't recognize, an
+If a prod run stops with *waiting for your commit* for a submission you don't recognize, an
 older submission is open for that organization. Find it and close it with [SOP_weekly_upload.md](SOP_weekly_upload.md)
 Procedures K and L, adding `--env prod`.
 
@@ -398,10 +403,11 @@ Prod weekly runs need their own schedule line with `--env prod` ([SOP_weekly_upl
   with bash and Python. If it can't be done that way, talk to the data team first.
 - **It isn't wastewater data:** set `CATEGORY_DEV` and `CATEGORY_PROD` to the right category's
   name on each portal. Ask the portal administrators which one.
-- **The source revises old records:** the tool never re-uploads published records. Revisions show
-  up as *revised values* FYIs in `msg.md`.
-- **You need different settings per portal:** `CATEGORY`, `MAX_NEW` and `ENABLED` all accept a
-  `_DEV` or `_PROD` suffix, which wins on that portal.
+- **The source revises old records:** revisions are sent as edits to the published records, for a
+  person to review and commit (Step 4, "Edits"). `run_edits.sh` sends a big batch of them on its
+  own, after asking.
+- **You need different settings per portal:** `CATEGORY`, `MAX_NEW`, `ENABLED`, `EDIT_REVISED`
+  and `MAX_EDITS` all accept a `_DEV` or `_PROD` suffix, which wins on that portal.
 
 Technical background is in [data_ETL/README.md](../data_ETL/README.md) (the source contract) and
 [how_a_run_works.md](how_a_run_works.md).

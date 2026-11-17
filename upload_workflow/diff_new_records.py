@@ -7,9 +7,9 @@ keyed on the identity column ``specimen collector sample ID``:
   * NEW       -- sample ID not in the baseline. Written to ``--new-out`` for
                  upload.
   * CHANGED   -- sample ID in the baseline but row content differs (e.g. PHAC
-                 revised a past week's measurement). Written to ``--changed-out``
-                 and reported, but NOT uploaded -- these existing records need
-                 a manual update.
+                 revised a past week's measurement). Written to ``--changed-out``.
+                 This script doesn't upload them; build_edits.py turns them into
+                 edits to the published records (unless EDIT_REVISED=0).
   * UNCHANGED -- identical to the baseline. Ignored.
 
 The baseline is a snapshot of the published records, as written by
@@ -121,10 +121,9 @@ def main(argv=None):
         ids = changedDf[KEY].tolist()
         shown = ", ".join(ids[:10]) + (" ..." if len(ids) > 10 else "")
         print(
-            f"\n  WARNING: {len(changedDf)} record(s) have revised values since the last "
-            f"publish and were NOT submitted.\n"
-            f"           These existing records need a manual update: {shown}\n"
-            f"           Full list -> {args.changed_out}\n",
+            f"\n  NOTE: {len(changedDf)} published record(s) have revised values: {shown}\n"
+            f"        Full list -> {args.changed_out}\n"
+            f"        (run_initial_upload.sh sends them as edits unless EDIT_REVISED=0.)\n",
             file=sys.stderr,
         )
 

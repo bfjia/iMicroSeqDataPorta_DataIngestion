@@ -6,11 +6,19 @@ digest:
 
   * a headline with the worst status across sources and the run time:
         🔴 problem  >  🟡 action needed  >  🟢 all good
-  * one short section per source: a bold one-liner with its own dot, then the
-    submission link if there is one;
-  * FYI lines inside a section (missing parser values, revised records,
-    test hold-backs) that never change the headline on their own;
-  * the log path only for problems.
+  * one block per source, worst first: a bold headline with its own dot and
+    status, then one labelled line per group (New, Edits, Submission), FYI
+    lines, and the submission link if there is one:
+
+        **🟡 PHAC-NWMP · review and commit**
+        - New: 223 records, weeks 2026-10-11 to 2026-10-25
+        - Edits: 69 published records (diagnostic measurement value 1)
+        - Submission 463: VALID, 0 errors
+        https://dev.virusseq-dataportal.ca/submission/environmental/463
+
+  * FYI lines (missing parser values, revised records that weren't sent as
+    edits, test hold-backs) never change the headline on their own;
+  * problems add the last log lines (failed steps) and the log path.
 
 Kept short on purpose. A quiet week still produces one line per source, so
 silence never has to be read as "did it run?". The file is plain Markdown; slack_post.py converts it for
@@ -34,12 +42,15 @@ DateColumn = "sample collection start date"
 Levels = {
     "failed": "problem",
     "guard": "problem",
+    "edit_guard": "problem",
     "invalid": "problem",
     "waiting_invalid": "problem",
     "review": "action",
     "waiting": "action",
     "paused": "action",
     "nothing_new": "ok",
+    "nothing_to_edit": "ok",
+    "cancelled": "ok",
     "dry_run": "ok",
 }
 Icons = {"problem": "🔴", "action": "🟡", "ok": "🟢"}
@@ -92,14 +103,6 @@ def waitedFor(createdAt):
     return f"open {days} day{'s' if days != 1 else ''}"
 
 
-def weeks(csvPath):
-    """' (week 2026-10-18)' / ' (weeks 2026-09-06 to 2026-10-11)' / ''."""
-    rng = dateRange(csvPath)
-    if not rng:
-        return ""
-    return f" (week {rng[0]})" if rng[0] == rng[1] else f" (weeks {rng[0]} to {rng[1]})"
-
-
 def logTail(path, lines=6):
     if not path or not os.path.exists(path):
         return ""
@@ -108,86 +111,161 @@ def logTail(path, lines=6):
     return "\n".join(content[-lines:])
 
 
+def span(csvPath):
+    """'week 2026-10-18' / 'weeks 2026-09-06 to 2026-10-11' / ''."""
+    rng = dateRange(csvPath)
+    if not rng:
+        return ""
+    return f"week {rng[0]}" if rng[0] == rng[1] else f"weeks {rng[0]} to {rng[1]}"
+
+
+def editFields(folder, counts=False, top=3):
+    """The fields the edits change, most changed first, from edit_fields.csv:
+    'diagnostic measurement value 1' or, with counts, 'geo loc name (site) (2,500), ...'."""
+    path = os.path.join(folder, "edit_fields.csv")
+    if not os.path.exists(path):
+        return ""
+    with open(path, newline="", encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    shown = [f"{r['field']} ({num(r['records_changed'])})" if counts else r["field"] for r in rows[:top]]
+    more = f", +{len(rows) - top} more" if len(rows) > top else ""
+    return ", ".join(shown) + more
+
+
 def section(s, folder):
-    """Render one source's section: a bold one-liner, then a link/FYIs. Returns (level, md)."""
+    """Render one source as a block (returns (level, md)):
+
+        **🟡 PHAC-NWMP · review and commit**
+        - New: 223 records, weeks 2026-10-11 to 2026-10-25
+        - Edits: 69 published records (diagnostic measurement value 1)
+        - Submission 463: VALID, 0 errors
+        https://...
+
+    A bold headline with the status, one labelled line per group, FYI lines,
+    then the link. Problems add the last log lines and the log path.
+    """
     status = s.get("STATUS", "failed")
     level = Levels.get(status, "problem")
-    head = f"**{Icons[level]} {s.get('SOURCE_ID', os.path.basename(folder))}:**"
-    sid = s.get("SUBMISSION_ID", "")
-    url = s.get("SUBMISSION_URL", "")
-    new = num(s.get("NEW"))
+    name = s.get("SOURCE_ID", os.path.basename(folder))
+    source, env = s.get("SOURCE_NAME", "<SOURCE>"), s.get("PORTAL_ENV", "dev")
+    sid, url = s.get("SUBMISSION_ID", ""), s.get("SUBMISSION_URL", "")
+    newN, edits = s.get("NEW", "0") or "0", s.get("EDITS", "0") or "0"
+    editsOnly = s.get("EDITS_ONLY") == "1"
     delta = os.path.join(folder, "delta.csv")
-    out = []
+    closeCmd = f"`./close_submission.sh {source} --env {env}`"
     # Chunked first load (run_initial_upload.sh --chunk)
-    total = s.get("CHUNK_TOTAL", "")
-    done = s.get("CHUNK_DONE", "0")
-    left = s.get("CHUNK_LEFT", "0")
-    again = (f"`./run_initial_upload.sh {s.get('SOURCE_NAME', '<SOURCE>')} --env {s.get('PORTAL_ENV', 'dev')} "
-             "--chunk`")
+    total, done, left = s.get("CHUNK_TOTAL", ""), s.get("CHUNK_DONE", "0"), s.get("CHUNK_LEFT", "0")
+    again = f"`./run_initial_upload.sh {source} --env {env} --chunk`"
     chunkOf = f"chunk {s.get('CHUNK_NUMBER', done)} of {total}" if total else ""
-    closeCmd = (f"./close_submission.sh {s.get('SOURCE_NAME', '<SOURCE>')} "
-                f"--env {s.get('PORTAL_ENV', 'dev')}")
+
+    newLine = ""
+    if newN != "0" and not editsOnly:
+        when = span(delta)
+        newLine = f"New: {num(newN)} records" + (f", {when}" if when else "")
+    editsLine = ""
+    if edits != "0":
+        changed = editFields(folder)
+        editsLine = f"Edits: {num(edits)} published records" + (f" ({changed})" if changed else "")
+    sent = [l for l in (newLine, editsLine) if l]
+    lines, link = [], ""
 
     if status == "review" and total:
+        head = f"{chunkOf}: review and commit"
         first, last = s.get("CHUNK_FIRST", ""), s.get("CHUNK_LAST", "")
-        span = f" (week {first})" if first == last else f" (weeks {first} to {last})"
-        out += [f"{head} {chunkOf}: {num(s.get('CHUNK_ROWS'))} records{span} passed validation. "
-                "Review and commit:", url]
+        when = f"week {first}" if first == last else f"weeks {first} to {last}"
+        lines = [f"New: {num(s.get('CHUNK_ROWS'))} records, {when}",
+                 f"Submission {sid}: VALID, {num(s.get('ERRORS', '0'))} errors"]
         if left not in ("", "0"):
-            out.append(f"- FYI: {num(left)} records still to upload. After committing, run {again} "
-                       "to continue")
+            lines.append(f"Still to upload: {num(left)} records. After committing, run {again}")
+        link = url
     elif status == "paused":
-        out += [f"{head} chunked upload paused after {done} of {total} chunks; {num(left)} records "
-                f"still to upload. Run {again} to continue."]
+        head = "chunked upload paused"
+        lines = [f"{done} of {total} chunks uploaded; {num(left)} records still to upload",
+                 f"To continue: {again}"]
     elif status == "review":
-        out += [f"{head} {new} new records{weeks(delta)} passed validation. Review and commit:", url]
+        head = "review and commit"
+        lines = sent + [f"Submission {sid}: VALID, {num(s.get('ERRORS', '0'))} errors"]
+        link = url
     elif status == "waiting":
-        out += [f"{head} submission {sid} is still waiting for your commit "
-                f"({waitedFor(s.get('PENDING_CREATED', ''))}). Nothing new uploaded.", url]
+        head = "waiting for your commit"
+        lines = [f"Submission {sid}, {waitedFor(s.get('PENDING_CREATED', ''))}. Nothing new uploaded."]
+        link = url
     elif status == "waiting_invalid":
-        out += [f"{head} submission {sid} failed validation "
-                f"({waitedFor(s.get('PENDING_CREATED', ''))}). Fix the cause, then "
-                f"`{closeCmd}` and run again.", url]
+        head = "an earlier submission failed validation"
+        lines = [f"Submission {sid}, {waitedFor(s.get('PENDING_CREATED', ''))}",
+                 f"Fix the cause, then {closeCmd} and run again"]
+        link = url
     elif status == "invalid":
-        out += [f"{head} submission {sid}{' (' + chunkOf + ')' if total else ''} failed validation ({num(s.get('ERRORS'))} errors). "
-                f"Fix the cause, then `{closeCmd}` and run again.", url]
+        head = "failed validation"
+        lines = sent + [f"Submission {sid}{' (' + chunkOf + ')' if total else ''}: INVALID, "
+                        f"{num(s.get('ERRORS'))} errors",
+                        f"Fix the cause, then {closeCmd} and run again"]
+        link = url
     elif status == "guard":
-        out += [f"{head} stopped: {new} new records is over the limit of "
-                f"{num(s.get('MAX_NEW'))}. Nothing uploaded. Likely a sample-ID change; "
-                "if expected, re-run with `--force`."]
+        head = "stopped: too many new records"
+        lines = [f"{num(newN)} new records; the limit is {num(s.get('MAX_NEW'))}. Nothing uploaded.",
+                 "Likely a sample-ID change. If expected, re-run with `--force`."]
+    elif status == "edit_guard":
+        head = "stopped: too many edits"
+        lines = [f"{num(edits)} published records were revised; the limit is "
+                 f"{num(s.get('MAX_EDITS'))}. Nothing uploaded.",
+                 f"What changed: {editFields(folder, counts=True) or 'see edit_fields.csv'}",
+                 f"If expected: `./run_edits.sh {source} --env {env}`"]
     elif status == "nothing_new":
-        out += [f"{head} nothing new ({num(s.get('IN_SCOPE'))} records checked)."]
+        head = "nothing new"
+        lines = [f"{num(s.get('IN_SCOPE'))} records checked"]
+    elif status == "nothing_to_edit":
+        head = "nothing to edit"
+        lines = [f"{num(s.get('IN_SCOPE'))} records checked"]
+    elif status == "cancelled":
+        head = "edits not sent"
+        lines = [f"Stopped at the confirmation; the {num(edits)} edits are in "
+                 f"`{rel(os.path.join(folder, 'edits.csv'))}`"]
     elif status == "dry_run":
-        inChunks = (f" in {total} chunks of up to {num(s.get('CHUNK_SIZE'))}"
-                    if total else "")
-        out += [f"{head} dry run: {new} new records{weeks(delta)} would be uploaded{inChunks} "
-                f"(`{rel(delta)}`)."]
+        head = "dry run, nothing sent"
+        lines = list(sent)
+        if total:
+            lines.append(f"In {total} chunks of up to {num(s.get('CHUNK_SIZE'))}")
+        files = ([delta] if newLine else []) + ([os.path.join(folder, "edits.csv")] if editsLine else [])
+        if files:
+            lines.append("Files: " + ", ".join(f"`{rel(f)}`" for f in files))
+        if not sent:
+            lines.append("Nothing to upload")
     else:  # failed
-        reason = s.get("REASON", "")
-        out += [f"{head} run failed during {s.get('STEP', 'an unknown step')}."
-                + (f" {reason}" if reason else "")]
-        tail = logTail(s.get("LOG"))
-        if tail:
-            out += ["```", tail, "```"]
+        head = f"run failed during {s.get('STEP', 'an unknown step')}"
+        lines = [s.get("REASON", "")]
 
     # FYI lines: worth knowing, but never a reason to change the headline.
     changed = s.get("CHANGED", "0")
-    if changed not in ("", "0"):
-        out.append(f"- FYI: {num(changed)} published records were revised at the source, not "
-                   f"re-uploaded (`{rel(os.path.join(folder, 'changed.csv'))}`)")
+    if changed not in ("", "0") and edits == "0":
+        # Revised records that weren't sent as edits: edits are off for this
+        # source, or a --chunk first load (which doesn't send edits).
+        how = (f"send them with `./run_edits.sh {source} --env {env}`" if s.get("EDIT_REVISED") == "1"
+               else "edits are off for this source")
+        lines.append(f"FYI: {num(changed)} published records were revised at the source, not sent "
+                     f"({how}; `{rel(os.path.join(folder, 'changed.csv'))}`)")
+    if editsOnly and newN != "0":
+        lines.append(f"FYI: {num(newN)} new records were not sent; the weekly run uploads them")
     missingPath = os.path.join(folder, "missing.txt")
     if os.path.exists(missingPath):
         with open(missingPath, encoding="utf-8") as handle:
             missing = [l.strip() for l in handle if l.strip()]
         if missing:
-            out.append("- FYI: missing values, please supply: " + "; ".join(missing))
+            lines.append("FYI: missing values, please supply: " + "; ".join(missing))
     if s.get("NO_WRITE_SCOPE") == "1":
-        out.append(f"- FYI: the account can't write to {s.get('ORGANIZATION', 'this organization')} "
-                   "on this portal yet; a real run would stop")
+        lines.append(f"FYI: the account can't write to {s.get('ORGANIZATION', 'this organization')} "
+                     "on this portal yet; a real run would stop")
     held = s.get("HELD_OUT", "0")
     if held not in ("", "0"):
-        out.append(f"- FYI: test mode, {num(held)} records held back")
+        lines.append(f"FYI: test mode, {num(held)} records held back")
 
+    out = [f"**{Icons[level]} {name} · {head}**"] + [f"- {l}" for l in lines if l]
+    if link:
+        out.append(link)
+    if status == "failed":
+        tail = logTail(s.get("LOG"))
+        if tail:
+            out += ["```", tail, "```"]
     if level == "problem" and s.get("LOG"):
         out.append(f"Log: `{rel(s['LOG'])}`")
     return level, "\n".join(out)

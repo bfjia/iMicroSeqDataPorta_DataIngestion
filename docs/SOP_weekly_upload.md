@@ -23,6 +23,7 @@ Adding a new data source is a separate procedure: [SOP_new_source.md](SOP_new_so
 | **Submission** | One batch of records uploaded to the portal. Each has a number. `msg.md` gives you the number and a link to it (or see Procedure K). |
 | **Validate** | The portal checks the records for errors. The result is **VALID** (all good) or **INVALID** (some records have problems). |
 | **Commit** | Publishing a VALID submission. **You do this on the website.** The tool never commits. |
+| **Edit** | A correction to a record that is already published, because the source has revised it. The tool sends edits in the same submission as the new records; the website shows each one as old value → new value. They change nothing until you commit. |
 | **Close** | Throwing away a submission that hasn't been committed, so a new one can be uploaded. **The website can't do this yet:** use the `close_submission.sh` script (Procedure L). |
 | **msg.md** | The tool's message to you after every run: what happened and what to do next |
 | **Terminal** | The black window where you type commands (Ubuntu / WSL) |
@@ -106,20 +107,30 @@ If no Slack message arrived after a scheduled run, check `msg.md`. A line starti
 
 ### Step 3. Review the submission on the website
 
-The 🟡 line looks like this:
+The 🟡 block looks like this:
 
 ```
-🟡 PHAC-NWMP: 155 new records (week 2026-10-18) passed validation. Review and commit:
+🟡 PHAC-NWMP · review and commit
+• New: 155 records, week 2026-10-18
+• Edits: 69 published records (diagnostic measurement value 1)
+• Submission <number>: VALID, 0 errors
 https://dev.virusseq-dataportal.ca/submission/environmental/<number>
 ```
+
+The **Edits** line appears only when the source has revised records that are already published,
+and names the fields that change. Some weeks there are only new records, some weeks only edits.
 
 1. **Open the link** (Ctrl+click it in VS Code, or copy it into your browser). Log in to the portal
    if asked. No link? See Procedure K.
 2. **Check before committing:**
    - the submission number on the page matches the one in `msg.md`;
    - the status is **VALID** with **no errors**;
-   - the number of records matches `msg.md` (e.g. 155);
-   - spot-check a few records: dates are recent, places look right, and the values aren't blank.
+   - the number of records matches `msg.md`: new records (e.g. 155) and, if any, edits (e.g. 69);
+   - spot-check a few new records: dates are recent, places look right, and the values aren't
+     blank;
+   - if there are edits, spot-check a few: each shows the old and the new value. Usually only a
+     measurement changes, for recent weeks. Many fields changing at once, or very old weeks, is
+     unusual: ask the data team before committing.
 3. If anything looks wrong, **don't commit.** See "When to ask for help" at the end. If it has to
    be redone, close it with the script (Procedure L), not on the website.
 
@@ -132,7 +143,7 @@ submission as **COMMITTED**. The records are now published.
 > button is named differently, the data team will update this section.
 
 **If you don't commit**, the next weekly run won't upload anything new for that source. It reminds
-you (🟡 *still waiting for your commit*) until you do. No data is lost: everything that's new goes
+you (🟡 *waiting for your commit*) until you do. No data is lost: everything that's new goes
 up on the first run after you commit.
 
 ---
@@ -208,10 +219,11 @@ You can type `stop` at any question. Nothing is lost: run the same command again
 carries on with whatever isn't published yet. If a chunk fails validation, the run stops; see
 Procedure E. Keep the terminal open while chunks upload.
 
-### Procedure D: "still waiting for your commit" (🟡)
+### Procedure D: "waiting for your commit" (🟡)
 
 ```
-🟡 PHAC-NWMP: submission <number> is still waiting for your commit (open 7 days). Nothing new uploaded.
+🟡 PHAC-NWMP · waiting for your commit
+• Submission <number>, open 7 days. Nothing new uploaded.
 https://dev.virusseq-dataportal.ca/submission/environmental/<number>
 ```
 
@@ -222,10 +234,16 @@ it instead (Procedure L).
 ### Procedure E: "failed validation" (🔴)
 
 ```
-🔴 PHAC-NWMP: submission <number> failed validation (8 errors). Fix the cause, then `./close_submission.sh PHAC` and run again.
+🔴 PHAC-NWMP · failed validation
+• New: 155 records, week 2026-10-18
+• Submission <number>: INVALID, 8 errors
+• Fix the cause, then `./close_submission.sh PHAC --env dev` and run again
 https://dev.virusseq-dataportal.ca/submission/environmental/<number>
 Log: `runs/<date>-<time>/PHAC-NWMP/run.log`
 ```
+
+If the block says *an earlier submission failed validation*, it's a submission from a previous
+run that's still open; the steps are the same.
 
 1. Open the link and look at the **Status** column. It shows which records failed and why. To see
    the errors in the terminal instead, see Procedure K.
@@ -250,14 +268,15 @@ to the data team, who will add the missing value. Nothing else is needed from yo
 ### Procedure G: "revised values" (FYI line)
 
 ```
-- FYI: 3 published records were revised at the source, not re-uploaded (`runs/…/changed.csv`)
+- FYI: 3 published records were revised at the source, not sent (edits are off for this source; `runs/…/changed.csv`)
 ```
 
-The source changed numbers for records that are already published. The tool never overwrites
-published records. Pass the line on to the data team if the corrections matter. Otherwise no
-action is needed.
+The source changed numbers for records that are already published. Normally the tool sends these
+as edits, in the same submission as the new records (Step 3). You see this line only when edits
+are turned off for that source, or after a chunked first load. Pass the line on to the data team
+if the corrections matter. Otherwise no action is needed.
 
-### Procedure H: "stopped: N new records is over the limit" (🔴)
+### Procedure H: "stopped: too many new records" (🔴)
 
 The tool found far more new records than a normal week. This is a safety stop: it usually means
 the source changed its format, and uploading would create duplicates. **Don't use `--force`
@@ -459,6 +478,48 @@ Type <number> to close it, or press Enter to cancel:
 | `a pipeline run is in progress` | A run is going right now | Wait a few minutes and try again |
 | `ERROR: … still shows as open after closing it` | The portal didn't close it | Send the output to the data team |
 | `ERROR: … HTTP 401` / `403` | Login or permission problem | Check `upload_workflow/.env`; tell the data team if it repeats |
+
+### Procedure M: send only the edits (data team)
+
+Use this to bring already-published records up to date on their own, for example after a
+converter change, or when a run stopped with "stopped: too many edits" (Procedure N).
+
+```bash
+cd /mnt/d/OneDrive/ProjectIngestion
+conda activate ProjectIngestion
+./run_edits.sh PHAC --dry-run   # 1. see what would be edited; sends nothing
+./run_edits.sh PHAC             # 2. show the edits, ask, send
+```
+
+Add `--env prod` for prod. It downloads fresh data, compares it with what's published, and shows
+how many records would change, which fields, and a few examples:
+
+```
+      Edits for the 69 revised record(s). Fields that change:
+          69  diagnostic measurement value 1: e.g. '0.838214474305977' -> '2.61515129117012'
+[6/7] 69 published record(s) to edit, e.g. PHAC_2026-10-18_Bathurst_covN2, …
+      Send these 69 edit(s) to PHAC-AUTOINGEST on the dev portal? Type yes, or stop:
+```
+
+1. Type `yes` and press **Enter** to send them, or `stop` to end with nothing sent.
+2. Wait until it says the submission is **VALID** and shows its link.
+3. Review and commit it on the website (Steps 3–4). Each edit shows the old and the new value.
+
+It sends only edits; new records wait for the weekly run. It needs a terminal.
+
+### Procedure N: "stopped: too many edits" (🔴)
+
+```
+🔴 PHAC-NWMP · stopped: too many edits
+• 2,500 published records were revised; the limit is 2,000. Nothing uploaded.
+• What changed: geo loc name (site) (2,500), diagnostic measurement value 1 (70)
+• If expected: `./run_edits.sh PHAC --env dev`
+```
+
+Far more already-published records changed than in a normal week (PHAC usually revises about 70).
+This is a safety stop: it usually means the source, or the tool's converter, changed a value for
+everything. Nothing was uploaded. **Don't use `--force` yourself.** Send the 🔴 line to the data
+team. If the changes are expected, they send them with `run_edits.sh` (Procedure M).
 
 ---
 

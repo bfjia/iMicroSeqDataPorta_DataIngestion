@@ -7,13 +7,16 @@
 #   1 pending check   stop if a submission for the org is still open (before any work)
 #   2 ETL             data_ETL/<SOURCE>/etl.sh -> upload-ready CSV
 #   3 date window     keep only weeks from <ENV>_MIN_START_DATE (pipeline.conf)
-#   4 portal snapshot what the org already has published
-#   5 diff            new / changed / unchanged
-#   6 guard           stop if "new" is suspiciously large (MAX_NEW)
-#   7 upload          upload + validate the new records
+#   4 portal snapshot what the org already has published (and each record's system ID)
+#   5 diff            new / changed / unchanged; changed (revised) records become edits
+#   6 guard           stop if "new" (MAX_NEW) or the edits (MAX_EDITS) are suspiciously many
+#   7 upload          upload + validate the new records and the edits, in ONE submission
 #
 # It NEVER publishes. A VALID upload is left open for a person to review and
 # commit on the portal website. Every run writes a status for msg.md.
+#
+# --edits-only (what ./run_edits.sh runs) sends only the edits, after showing
+# them and asking on the terminal; new records are left for the weekly run.
 # docs/how_a_run_works.md explains each step in detail;
 # docs/SOP_weekly_upload.md is the plain-language guide.
 #
@@ -39,7 +42,11 @@ Usage: ./run_initial_upload.sh <SOURCE> [options]
 Options:
   --env dev|prod        which portal (default: PORTAL_ENV in pipeline.conf)
   --dry-run             do every step except the upload: shows what WOULD be uploaded
-  --force               upload even if there are more new records than MAX_NEW
+  --force               upload even if there are more new records than MAX_NEW, or
+                        more edits than MAX_EDITS
+  --edits-only          send only the edits to published records the source has
+                        revised (what ./run_edits.sh runs). Shows them and asks
+                        first; needs a terminal. Not limited by MAX_EDITS.
   --holdout-weeks N     TEST ONLY: hold back the newest N weeks of new records
   --holdout-random N    TEST ONLY: also hold back N random older new records
   --keep-work           keep the bulky intermediate files in runs/
@@ -63,11 +70,13 @@ HOLDOUT_WEEKS=0
 HOLDOUT_RANDOM=0
 KEEP_WORK=0
 CHUNK=0
+EDITS_ONLY=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --env)            [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; ENV_ARG="$2"; shift ;;
         --dry-run)        DRY_RUN=1 ;;
         --force)          FORCE=1 ;;
+        --edits-only)     EDITS_ONLY=1 ;;
         --holdout-weeks)  [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; HOLDOUT_WEEKS="$2"; shift ;;
         --holdout-random) [[ $# -ge 2 ]] || { echo "$1 needs a value" >&2; exit 2; }; HOLDOUT_RANDOM="$2"; shift ;;
         --keep-work)      KEEP_WORK=1 ;;
@@ -86,6 +95,10 @@ done
 if ! [[ "${HOLDOUT_WEEKS}" =~ ^[0-9]+$ && "${HOLDOUT_RANDOM}" =~ ^[0-9]+$ ]]; then
     echo "--holdout-weeks and --holdout-random need a whole number" >&2; exit 2
 fi
+if [[ "${EDITS_ONLY}" -eq 1 ]] && (( CHUNK + FORCE + HOLDOUT_WEEKS + HOLDOUT_RANDOM > 0 )); then
+    echo "--edits-only sends only edits: it can't be combined with --chunk, --force or --holdout-*" >&2
+    exit 2
+fi
 
 SOURCE_DIR="${REPO_DIR}/data_ETL/${SOURCE_NAME}"
 if [[ ! -f "${SOURCE_DIR}/source.conf" || ! -f "${SOURCE_DIR}/etl.sh" ]]; then
@@ -98,6 +111,8 @@ PORTAL_ENV="dev"
 DEV_MIN_START_DATE=""
 PROD_MIN_START_DATE=""
 DEFAULT_MAX_NEW=2000
+DEFAULT_EDIT_REVISED=1
+DEFAULT_MAX_EDITS=2000
 CHUNK_SIZE=10000
 SLACK_CHANNEL=""
 # shellcheck source=pipeline.conf
@@ -118,9 +133,19 @@ source "${UPLOAD_DIR}/load_source_conf.sh"
 loadSourceConf "${SOURCE_DIR}" "${PORTAL_ENV}"
 checkSourceConf "${SOURCE_DIR}" "${PORTAL_ENV}" || exit 2
 MAX_NEW="${MAX_NEW:-${DEFAULT_MAX_NEW}}"
+EDIT_REVISED="${EDIT_REVISED:-${DEFAULT_EDIT_REVISED}}"
+MAX_EDITS="${MAX_EDITS:-${DEFAULT_MAX_EDITS}}"
+[[ "${EDIT_REVISED}" == 0 || "${EDIT_REVISED}" == 1 ]] \
+    || { echo "ERROR: EDIT_REVISED must be 0 or 1 (got '${EDIT_REVISED}')" >&2; exit 2; }
+[[ "${MAX_EDITS}" =~ ^[0-9]+$ ]] \
+    || { echo "ERROR: MAX_EDITS must be a whole number (got '${MAX_EDITS}')" >&2; exit 2; }
 cutoffVar="${ENV_UPPER}_MIN_START_DATE"
 CUTOFF="${!cutoffVar:-}"
 
+if [[ "${EDITS_ONLY}" -eq 1 && "${DRY_RUN}" -eq 0 && ! -t 0 ]]; then
+    echo "ERROR: --edits-only asks before sending the edits, so it has to be run from a terminal" >&2
+    exit 2
+fi
 if [[ "${CHUNK}" -eq 1 ]]; then
     [[ "${CHUNK_SIZE}" =~ ^[1-9][0-9]*$ ]] \
         || { echo "ERROR: CHUNK_SIZE in pipeline.conf must be a whole number (got '${CHUNK_SIZE}')" >&2; exit 2; }
@@ -195,7 +220,8 @@ onExit() {
         setStatus STEP "${STEP}"
     fi
     if [[ "${KEEP_WORK}" -eq 0 ]]; then
-        rm -rf "${OUT}/in_scope.csv" "${OUT}/published.csv" "${OUT}/submit" "${OUT}/chunks"
+        rm -rf "${OUT}/in_scope.csv" "${OUT}/published.csv" "${OUT}/published_ids.csv" \
+            "${OUT}/submit" "${OUT}/chunks"
     fi
     echo "== ${SOURCE_ID}: finished with status '$(grep '^STATUS=' "${STATUS_FILE}" | tail -n1 | cut -d= -f2)' (log: ${LOG#"${REPO_DIR}"/})"
     if [[ "${STANDALONE}" -eq 1 ]]; then
@@ -220,12 +246,20 @@ setStatus ORGANIZATION "${ORGANIZATION}"
 setStatus LOG "${LOG}"
 setStatus CUTOFF "${CUTOFF}"
 setStatus MAX_NEW "${MAX_NEW}"
+setStatus EDIT_REVISED "${EDIT_REVISED}"
+setStatus MAX_EDITS "${MAX_EDITS}"
+setStatus EDITS_ONLY "${EDITS_ONLY}"
 
 echo "== ${SOURCE_ID}: run started $(date '+%Y-%m-%d %H:%M:%S') on ${ENV_UPPER}"
 echo "   portal ${PORTAL_ENV}, organization ${ORGANIZATION}, category ${CATEGORY}, date window from ${CUTOFF:-the beginning}"
 (( HOLDOUT_WEEKS + HOLDOUT_RANDOM > 0 )) && echo "   TEST MODE: holding back records (--holdout-*)"
 (( DRY_RUN )) && echo "   DRY RUN: every step except the upload"
 (( CHUNK )) && echo "   CHUNKED: up to ${CHUNK_SIZE} records per submission, confirmed one at a time"
+if (( EDITS_ONLY )); then
+    echo "   EDITS ONLY: sends edits to revised published records, after asking; no new records"
+elif (( EDIT_REVISED )); then
+    echo "   Revised published records are sent as edits (up to MAX_EDITS=${MAX_EDITS})"
+fi
 
 # --- 1. Pending check, before any actual work ---------------------------
 STEP="login"
@@ -306,7 +340,8 @@ fi
 STEP="portal snapshot"
 echo "[4/7] Fetching what ${ORGANIZATION} already has published"
 python "${UPLOAD_DIR}/fetch_published.py" --category "${CATEGORY}" \
-    --organization "${ORGANIZATION}" --output "${OUT}/published.csv"
+    --organization "${ORGANIZATION}" --output "${OUT}/published.csv" \
+    --ids-out "${OUT}/published_ids.csv"
 
 # --- 5. Diff --------------------------------------------------------------
 STEP="diff"
@@ -316,7 +351,8 @@ DIFF_SUMMARY="$(python "${UPLOAD_DIR}/diff_new_records.py" --new "${OUT}/in_scop
     --changed-out "${OUT}/changed.csv" | tail -n1)"
 echo "      ${DIFF_SUMMARY}"
 NEW="$(kv new "${DIFF_SUMMARY}")"
-setStatus CHANGED "$(kv changed "${DIFF_SUMMARY}")"
+CHANGED="$(kv changed "${DIFF_SUMMARY}")"
+setStatus CHANGED "${CHANGED}"
 setStatus UNCHANGED "$(kv unchanged "${DIFF_SUMMARY}")"
 
 if (( HOLDOUT_WEEKS + HOLDOUT_RANDOM > 0 )); then
@@ -332,13 +368,46 @@ if (( HOLDOUT_WEEKS + HOLDOUT_RANDOM > 0 )); then
 fi
 setStatus NEW "${NEW}"
 
+# Revised records -> edits. They're already published, but the source has
+# changed them since; each edit carries the record's system ID and replaces it.
+EDITS=0
+if [[ "${CHANGED}" -gt 0 ]]; then
+    if [[ "${CHUNK}" -eq 1 ]]; then
+        echo "      ${CHANGED} published record(s) were revised; --chunk doesn't send edits."
+        echo "      Send them afterwards with ./run_edits.sh ${SOURCE_NAME} --env ${PORTAL_ENV}"
+    elif [[ "${EDIT_REVISED}" -eq 1 || "${EDITS_ONLY}" -eq 1 ]]; then
+        STEP="edits"
+        echo "      Edits for the ${CHANGED} revised record(s). Fields that change:"
+        EDITS_OUT="$(python "${UPLOAD_DIR}/build_edits.py" --changed "${OUT}/changed.csv" \
+            --ids "${OUT}/published_ids.csv" --published "${OUT}/published.csv" \
+            --output "${OUT}/edits.csv" --fields-out "${OUT}/edit_fields.csv")" \
+            || fail "Could not build the edits for the revised records; see the log."
+        sed '$d' <<< "${EDITS_OUT}"
+        EDITS="$(kv edits "$(tail -n1 <<< "${EDITS_OUT}")")"
+    fi
+fi
+setStatus EDITS "${EDITS}"
+
 # --- 6. Guard -------------------------------------------------------------
 STEP="size check"
-if [[ "${NEW}" -eq 0 ]]; then
-    echo "[6/7] Nothing new to upload."
+if [[ "${EDITS_ONLY}" -eq 1 ]]; then
+    # A person approves the edits below, so MAX_EDITS doesn't apply.
+    if [[ "${EDITS}" -eq 0 ]]; then
+        echo "[6/7] No published records need editing."
+        finish nothing_to_edit 0
+    fi
+    echo "[6/7] ${EDITS} published record(s) to edit, e.g. $(python -c '
+import csv, sys
+ids = [r["specimen collector sample ID"] for r in csv.DictReader(open(sys.argv[1], encoding="utf-8"))]
+print(", ".join(ids[:5]) + (", ..." if len(ids) > 5 else ""))
+' "${OUT}/edits.csv")"
+    if [[ "${NEW}" -gt 0 ]]; then
+        echo "      ${NEW} new record(s) are not sent here; the weekly run uploads them."
+    fi
+elif [[ "${NEW}" -eq 0 && "${EDITS}" -eq 0 ]]; then
+    echo "[6/7] Nothing new to upload$([[ "${EDIT_REVISED}" -eq 1 ]] && echo ", and nothing to edit")."
     finish nothing_new 0
-fi
-if [[ "${CHUNK}" -eq 1 ]]; then
+elif [[ "${CHUNK}" -eq 1 ]]; then
     # Chunks are confirmed one by one by a person, so MAX_NEW doesn't apply.
     STEP="chunk split"
     CHUNK_DIR="${OUT}/chunks"
@@ -356,24 +425,50 @@ elif [[ "${NEW}" -gt "${MAX_NEW}" && "${FORCE}" -eq 0 ]]; then
     echo "[6/7] STOP: ${NEW} new records is more than MAX_NEW=${MAX_NEW}. Nothing uploaded."
     echo "      If this is expected (e.g. a first load), re-run with --force, or --chunk."
     finish guard 1
+elif [[ "${EDITS}" -gt "${MAX_EDITS}" && "${FORCE}" -eq 0 ]]; then
+    echo "[6/7] ERROR: ${EDITS} published records were revised at the source, more than"
+    echo "      MAX_EDITS=${MAX_EDITS}. That many changes isn't expected. Nothing uploaded."
+    echo "      See what changed in ${OUT#"${REPO_DIR}"/}/edit_fields.csv and edits.csv."
+    echo "      If it's expected, send them with ./run_edits.sh ${SOURCE_NAME} --env ${PORTAL_ENV},"
+    echo "      or re-run with --force."
+    finish edit_guard 1
 else
-    echo "[6/7] ${NEW} new record(s) to upload$([[ "${FORCE}" -eq 1 && "${NEW}" -gt "${MAX_NEW}" ]] && echo " (over MAX_NEW, allowed by --force)")"
+    MSG="[6/7] ${NEW} new record(s)"
+    [[ "${EDITS}" -gt 0 ]] && MSG+=" and ${EDITS} edit(s)"
+    MSG+=" to upload"
+    [[ "${FORCE}" -eq 1 && "${NEW}" -gt "${MAX_NEW}" ]] && MSG+=" (new records over MAX_NEW, allowed by --force)"
+    [[ "${FORCE}" -eq 1 && "${EDITS}" -gt "${MAX_EDITS}" ]] && MSG+=" (edits over MAX_EDITS, allowed by --force)"
+    echo "${MSG}"
 fi
 
 if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "[7/7] DRY RUN: stopping before the upload. Nothing was sent to the portal."
-    echo "      The records that would be uploaded are in ${OUT#"${REPO_DIR}"/}/delta.csv"
+    if [[ "${EDITS_ONLY}" -eq 0 && "${NEW}" -gt 0 ]]; then
+        echo "      The new records that would be uploaded are in ${OUT#"${REPO_DIR}"/}/delta.csv"
+    fi
+    if [[ "${EDITS}" -gt 0 ]]; then
+        echo "      The edits that would be sent are in ${OUT#"${REPO_DIR}"/}/edits.csv (what changes: edit_fields.csv)"
+    fi
     finish dry_run 0
 fi
 
 # --- 7. Upload + validate (never commits) --------------------------------
-# uploadOne <csv> <work dir> <timeout seconds>
-# Uploads one file as a new submission and waits for validation. Sets
-# RESULT_ID, RESULT_STATUS, RESULT_URL and RESULT_ERRORS.
+freshToken() {   # tokens expire (3 h on dev), and a chunked load or a prompt can wait longer
+    PORTAL_TOKEN="$(python "${UPLOAD_DIR}/step1_token.py")" \
+        || fail "Could not log in to the ${PORTAL_ENV} portal again."
+    export PORTAL_TOKEN
+}
+
+# uploadOne <new-records csv, or ""> <work dir> <timeout seconds> [<edits csv>]
+# Uploads the new records and/or the edits into one submission and waits for
+# validation. Sets RESULT_ID, RESULT_STATUS, RESULT_URL and RESULT_ERRORS.
 uploadOne() {
+    local inputs=()
+    if [[ -n "$1" ]]; then inputs+=(--input "$1"); fi
+    if [[ -n "${4:-}" ]]; then inputs+=(--edits "$4"); fi
     rm -f "${OUT}/result.json"
     set +e
-    python "${UPLOAD_DIR}/main.py" --input "$1" --organization "${ORGANIZATION}" \
+    python "${UPLOAD_DIR}/main.py" "${inputs[@]}" --organization "${ORGANIZATION}" \
         --category "${CATEGORY}" --work-dir "$2" --result-json "${OUT}/result.json" --timeout "$3"
     MAIN_RC=$?
     set -e
@@ -392,23 +487,44 @@ print(d.get("submissionId") or "-", d.get("status") or "-", d.get("url") or "-",
         INVALID) finish invalid 1 ;;
         BLOCKED_BY_OPEN_SUBMISSION)
             fail "A submission (${RESULT_ID}) was opened for ${ORGANIZATION} while this run was working; nothing was uploaded." ;;
+        INCOMPLETE_SUBMISSION)
+            fail "Submission ${RESULT_ID} holds fewer records than this run sent (the portal didn't stage all of them). Don't commit it: close it with ./close_submission.sh ${SOURCE_NAME} --env ${PORTAL_ENV} and run again." ;;
+        SPLIT_SUBMISSION)
+            fail "The new records and the edits went into different submissions. Review both on the website before committing either (see the log)." ;;
         *)       fail "Validation ended with status ${RESULT_STATUS}." ;;
     esac
 }
 
 if [[ "${CHUNK}" -eq 0 ]]; then
+    NEW_FILE=""; EDITS_FILE=""; TIMEOUT=600
+    if [[ "${EDITS_ONLY}" -eq 0 && "${NEW}" -gt 0 ]]; then NEW_FILE="${OUT}/delta.csv"; fi
+    if [[ "${EDITS}" -gt 0 ]]; then EDITS_FILE="${OUT}/edits.csv"; TIMEOUT=1800; fi
+    if [[ "${EDITS_ONLY}" -eq 1 ]]; then
+        STEP="confirmation"
+        TIMEOUT=3600
+        echo
+        while true; do
+            printf '      Send these %s edit(s) to %s on the %s portal? Type yes, or stop: ' \
+                "${EDITS}" "${ORGANIZATION}" "${PORTAL_ENV}"
+            answer=""
+            read -r answer || answer="stop"
+            echo
+            case "${answer,,}" in
+                yes)  break ;;
+                stop) echo "      Stopped. Nothing was sent; the edits are in ${OUT#"${REPO_DIR}"/}/edits.csv"
+                      finish cancelled 0 ;;
+                *)    echo "      Please type yes or stop." ;;
+            esac
+        done
+        freshToken   # the question may have waited a long time
+    fi
     STEP="upload and validation"
     echo "[7/7] Uploading and validating (this never publishes)"
-    uploadOne "${OUT}/delta.csv" "${OUT}/submit" 600
+    uploadOne "${NEW_FILE}" "${OUT}/submit" "${TIMEOUT}" "${EDITS_FILE}"
     finish review 0
 fi
 
 # --- 7 (chunked). One submission per chunk, a person confirms each ---------
-freshToken() {   # tokens expire (3 h on dev), and a chunked load can take longer
-    PORTAL_TOKEN="$(python "${UPLOAD_DIR}/step1_token.py")" \
-        || fail "Could not log in to the ${PORTAL_ENV} portal again."
-    export PORTAL_TOKEN
-}
 openSubmission() {   # sets OPEN_ID / OPEN_STATUS (empty = nothing open). Never in $(...):
     local out key value  # a failed check must stop the run, not read as "nothing open"
     OPEN_ID=""; OPEN_STATUS=""

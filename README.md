@@ -49,8 +49,10 @@ in [docs/SOP_weekly_upload.md](docs/SOP_weekly_upload.md).
 1. **Checks** that nothing from an earlier run is still waiting on the portal. If something is,
    it stops and reminds you.
 2. **Downloads and converts** each source's latest data.
-3. **Compares** it with what's already published, and keeps only the new records.
-4. **Uploads them and waits for the portal's checks**, then stops. A person commits.
+3. **Compares** it with what's already published: new records, and published records the source
+   has since corrected.
+4. **Uploads the new records and the corrections together and waits for the portal's checks**,
+   then stops. A person reviews and commits them on the website.
 5. **Writes one short message**, `msg.md`, which is also posted to Slack: all good, action
    needed, or a problem.
 
@@ -65,6 +67,7 @@ upload_workflow/         the scripts that talk to the portal
 data_specification/      the iMicroSeq standard: fields and allowed values
 run_weekly_update.sh     the weekly update: every source (what the schedule runs)
 run_initial_upload.sh    one source: its first load (--chunk for big ones), or a one-off run
+run_edits.sh             one source: only the corrections to already-published records
 close_submission.sh      throw away an uncommitted upload, to start over
 list_sources.sh          each source's organization on dev and prod
 pipeline.conf            settings shared by all sources

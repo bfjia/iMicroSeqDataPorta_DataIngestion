@@ -94,6 +94,17 @@ def apiPost(baseUrl, path, token, action, **kwargs):
     return raiseForStatus(response, action)
 
 
+def apiPut(baseUrl, path, token, action, **kwargs):
+    """PUT to ``path`` with the bearer token attached."""
+    response = requests.put(
+        baseUrl.rstrip("/") + path,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=300,
+        **kwargs,
+    )
+    return raiseForStatus(response, action)
+
+
 def pollUntil(fetch, isDone, interval, timeout, description):
     """Call ``fetch`` every ``interval`` seconds until ``isDone`` accepts it."""
     deadline = time.monotonic() + timeout

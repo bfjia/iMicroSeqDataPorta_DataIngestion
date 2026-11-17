@@ -97,8 +97,8 @@ the row with a non-blank `geo loc name (site)` and preserves the original order.
 
 - **Recent weeks are partial.** The newest week usually has fewer records than a complete week,
   e.g. 155 vs ~215, and its values may be revised later. Records that arrive later are picked up
-  as new on later runs. Revised values of already-published records show up as "changed" FYIs and
-  are not re-uploaded.
+  as new on later runs. Revised values of already-published records (about 70 a week) are sent as
+  edits in the weekly submission, for a person to review and commit.
 - **Dev window.** Dev only receives weeks from `DEV_MIN_START_DATE` (2026-09-01) on. That is
   1,437 records (7 weeks) in the 2026-10-30 feed.
 - **Prod gets the full history** (`PROD_MIN_START_DATE` is empty): 51,224 records in the
